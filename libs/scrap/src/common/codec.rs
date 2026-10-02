@@ -1068,7 +1068,7 @@ pub fn enable_hwcodec_option() -> bool {
             &Config::get_option(OPTION_ENABLE_HWCODEC),
         );
     }
-    false
+    Config::get_option(OPTION_ENABLE_HWCODEC) == "Y"
 }
 #[cfg(feature = "vram")]
 pub fn enable_vram_option(encode: bool) -> bool {
