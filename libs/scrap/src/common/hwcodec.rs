@@ -310,6 +310,10 @@ pub struct HwRamDecoder {
 }
 
 impl HwRamDecoder {
+    pub fn is_hw(&self) -> bool {
+        self.info.hwdevice != hwcodec::ffmpeg::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE
+    }
+
     pub fn try_get(format: CodecFormat) -> Option<CodecInfo> {
         let mut info = None;
         let soft = CodecInfo::soft();

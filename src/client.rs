@@ -110,6 +110,12 @@ pub const SEC30: Duration = Duration::from_secs(30);
 const RESTART_REMOTE_DEVICE_GRACE: Duration = Duration::from_secs(5 * 60);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
 const MAX_DECODE_FAIL_COUNTER: usize = 3;
+// A VideoToolbox decoder errors EAGAIN while its invalidated session
+// restarts after the app was backgrounded; the first failures of an active
+// hardware decoder are warm-up, not a dead codec. The budget is
+// frame-count based, so a peer cannot extend it, and it re-arms on
+// successful output because backgrounding recurs routinely on iOS.
+const WARM_UP_NO_OUTPUT_FRAMES: usize = 10;
 
 pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
 pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
@@ -2668,6 +2674,7 @@ pub struct VideoHandler {
     _display: usize, // useful for debug
     fail_counter: usize,
     first_frame: bool,
+    no_output_frames: usize,
 }
 
 impl VideoHandler {
@@ -2700,6 +2707,7 @@ impl VideoHandler {
             _display,
             fail_counter: 0,
             first_frame: true,
+            no_output_frames: 0,
         }
     }
 
@@ -2726,8 +2734,18 @@ impl VideoHandler {
                 );
                 if res.as_ref().is_ok_and(|x| *x) {
                     self.fail_counter = 0;
+                    self.no_output_frames = 0;
                 } else {
-                    if self.fail_counter < usize::MAX {
+                    // Unlike MediaCodec's buffering (Ok(false)), an invalidated
+                    // VT session surfaces EAGAIN as Err via hwcodec's
+                    // ffmpeg_ram_decode mapping, so Err counts toward the same
+                    // warm-up budget here.
+                    if res.as_ref().is_ok_and(|x| !*x) || res.is_err() {
+                        self.no_output_frames += 1;
+                    }
+                    let count_as_fail = !self.decoder.warm_up_grace()
+                        || self.no_output_frames > WARM_UP_NO_OUTPUT_FRAMES;
+                    if count_as_fail && self.fail_counter < usize::MAX {
                         if self.first_frame && self.fail_counter < MAX_DECODE_FAIL_COUNTER {
                             log::error!("decode first frame failed");
                             self.fail_counter = MAX_DECODE_FAIL_COUNTER;
@@ -2770,6 +2788,7 @@ impl VideoHandler {
         self.decoder = Decoder::new(format, luid);
         self.fail_counter = 0;
         self.first_frame = true;
+        self.no_output_frames = 0;
     }
 
     /// Start or stop screen record.
