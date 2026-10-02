@@ -290,3 +290,6 @@ rpath = true
 
 [profile.dev]
 debug = 1
+
+[patch."https://github.com/rustdesk-org/hwcodec"]
+hwcodec = { git = "https://github.com/rcbevans/hwcodec", branch = "ffmpeg7-vaapi-encode" }
