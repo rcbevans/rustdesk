@@ -1,0 +1,15 @@
+--- a/libavutil/hwcontext_videotoolbox.c
++++ b/libavutil/hwcontext_videotoolbox.c
+@@ -564,8 +564,10 @@ static CFDictionaryRef vt_cv_buffer_copy_attachments(CVBufferRef buffer,
+         (TARGET_OS_IOS  && defined(__IPHONE_15_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_15_0)  || \
+         (TARGET_OS_TV   && defined(__TVOS_15_0)   && __TV_OS_VERSION_MAX_ALLOWED     >= __TVOS_15_0)
+         // On recent enough versions, just use the respective API
+-        if (__builtin_available(macOS 12.0, iOS 15.0, tvOS 15.0, *))
+-            if (CVBufferCopyAttachments != NULL) return CVBufferCopyAttachments(buffer, attachment_mode);
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Wunguarded-availability-new"
++        if (CVBufferCopyAttachments != NULL) return CVBufferCopyAttachments(buffer, attachment_mode);
++#pragma clang diagnostic pop
+     #endif
+ 
+     // Check that the target is lower than macOS 12 / iOS 15 / tvOS 15

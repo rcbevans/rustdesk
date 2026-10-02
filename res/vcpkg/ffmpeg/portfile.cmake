@@ -33,6 +33,7 @@ vcpkg_from_github(
     patch/0013-fix-qsv-encode-timeouts.patch
     patch/0014-fix-qsv-encode-buffer.patch
     patch/0015-fix-hybrid-mp4-finalization.patch
+    patch/0016-hwcontext-videotoolbox-drop-ios15-availability-check.patch
 )
 
 if(SOURCE_PATH MATCHES " ")
@@ -186,9 +187,10 @@ elseif(VCPKG_TARGET_IS_IOS)
 --disable-autodetect \
 --disable-hwaccels \
 --disable-encoders \
---disable-videotoolbox \
---extra-cflags=\"-arch arm64 -mios-version-min=8.0 -fembed-bitcode\" \
---extra-ldflags=\"-arch arm64 -mios-version-min=8.0 -fembed-bitcode\" \
+--enable-videotoolbox \
+--enable-hwaccel=h264_videotoolbox,hevc_videotoolbox \
+--extra-cflags=\"-arch arm64 -mios-version-min=13.0 -fembed-bitcode\" \
+--extra-ldflags=\"-arch arm64 -mios-version-min=13.0 -fembed-bitcode\" \
 ")
 elseif(VCPKG_CMAKE_SYSTEM_NAME STREQUAL "Android")
     string(APPEND OPTIONS "\
