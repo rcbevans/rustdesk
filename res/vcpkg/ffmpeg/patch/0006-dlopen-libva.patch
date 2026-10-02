@@ -1878,6 +1878,43 @@ index 0b2e071cb3..2c51223d45 100644
  } AVVAAPIDeviceContext;
  
  /**
+diff --git a/libavcodec/vaapi_encode_av1.c b/libavcodec/vaapi_encode_av1.c
+--- a/libavcodec/vaapi_encode_av1.c
++++ b/libavcodec/vaapi_encode_av1.c
+@@ -871,6 +871,7 @@
+ {
+     VAAPIEncodeContext      *ctx = avctx->priv_data;
+     VAAPIEncodeAV1Context  *priv = avctx->priv_data;
++    VAAPIDynLoadFunctions   *vaf = ctx->hwctx->funcs;
+     VAConfigAttrib attr;
+     VAStatus vas;
+     int ret;
+@@ -897,7 +898,7 @@
+         return ret;
+ 
+     attr.type = VAConfigAttribEncAV1;
+-    vas = vaGetConfigAttributes(ctx->hwctx->display,
++    vas = vaf->vaGetConfigAttributes(ctx->hwctx->display,
+                                 ctx->va_profile,
+                                 ctx->va_entrypoint,
+                                 &attr, 1);
+@@ -914,7 +915,7 @@
+     }
+ 
+     attr.type = VAConfigAttribEncAV1Ext1;
+-    vas = vaGetConfigAttributes(ctx->hwctx->display,
++    vas = vaf->vaGetConfigAttributes(ctx->hwctx->display,
+                                 ctx->va_profile,
+                                 ctx->va_entrypoint,
+                                 &attr, 1);
+@@ -932,7 +933,7 @@
+ 
+     /** This attr provides essential indicators, return error if not support. */
+     attr.type = VAConfigAttribEncAV1Ext2;
+-    vas = vaGetConfigAttributes(ctx->hwctx->display,
++    vas = vaf->vaGetConfigAttributes(ctx->hwctx->display,
+                                 ctx->va_profile,
+                                 ctx->va_entrypoint,
+                                 &attr, 1);
 -- 
 2.34.1
-
