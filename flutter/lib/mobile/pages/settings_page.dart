@@ -120,6 +120,9 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         bind.mainGetOptionSync(key: kOptionEnableRecordSession));
     _enableHardwareCodec = option2bool(kOptionEnableHwcodec,
         bind.mainGetOptionSync(key: kOptionEnableHwcodec));
+    if (isIOS)
+      _enableHardwareCodec =
+          bind.mainGetOptionSync(key: kOptionEnableHwcodec) == 'Y';
     _allowWebSocket = mainGetBoolOptionSync(kOptionAllowWebSocket);
     _allowInsecureTlsFallback =
         mainGetBoolOptionSync(kOptionAllowInsecureTLSFallback);
@@ -940,6 +943,25 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                       await mainSetBoolOption(kOptionEnableHwcodec, v);
                       final newValue =
                           await mainGetBoolOption(kOptionEnableHwcodec);
+                      setState(() {
+                        _enableHardwareCodec = newValue;
+                      });
+                    },
+            ),
+          ]),
+        if (isIOS)
+          SettingsSection(title: Text(translate('Hardware Codec')), tiles: [
+            SettingsTile.switchTile(
+              title: Text(translate('Enable hardware codec')),
+              initialValue: _enableHardwareCodec,
+              onToggle: isOptionFixed(kOptionEnableHwcodec)
+                  ? null
+                  : (v) async {
+                      await bind.mainSetOption(
+                          key: kOptionEnableHwcodec, value: v ? 'Y' : 'N');
+                      final newValue =
+                          bind.mainGetOptionSync(key: kOptionEnableHwcodec) ==
+                              'Y';
                       setState(() {
                         _enableHardwareCodec = newValue;
                       });

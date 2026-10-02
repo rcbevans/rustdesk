@@ -487,6 +487,50 @@ fn get_mime_type(codec: DataFormat) -> &'static str {
     }
 }
 
+#[cfg(target_os = "ios")]
+fn probe_ios_videotoolbox_decoders() -> HwCodecConfig {
+    use hwcodec::{
+        ffmpeg::AVHWDeviceType::AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+        ffmpeg_ram::Priority::Best,
+    };
+
+    #[link(name = "VideoToolbox", kind = "framework")]
+    extern "C" {
+        fn VTIsHardwareDecodeSupported(codec_type: u32) -> u8;
+    }
+    // kCMVideoCodecType_H264 / kCMVideoCodecType_HEVC from CoreMedia
+    const K_CM_VIDEO_CODEC_TYPE_H264: u32 = 0x6176_6331; // 'avc1'
+    const K_CM_VIDEO_CODEC_TYPE_HEVC: u32 = 0x6876_6331; // 'hvc1'
+
+    // Safe: the function takes no pointers and only reads a fixed device property.
+    let h264 = unsafe { VTIsHardwareDecodeSupported(K_CM_VIDEO_CODEC_TYPE_H264) != 0 };
+    let hevc = unsafe { VTIsHardwareDecodeSupported(K_CM_VIDEO_CODEC_TYPE_HEVC) != 0 };
+    log::info!("videotoolbox hardware decode support, h264: {h264}, hevc: {hevc}");
+    let mut ram_decode = vec![];
+    if h264 {
+        ram_decode.push(CodecInfo {
+            name: "h264".to_owned(),
+            format: DataFormat::H264,
+            hwdevice: AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+            priority: Best as _,
+            ..Default::default()
+        });
+    }
+    if hevc {
+        ram_decode.push(CodecInfo {
+            name: "hevc".to_owned(),
+            format: DataFormat::H265,
+            hwdevice: AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+            priority: Best as _,
+            ..Default::default()
+        });
+    }
+    HwCodecConfig {
+        ram_decode,
+        ..Default::default()
+    }
+}
+
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct HwCodecConfig {
     #[serde(default)]
@@ -630,7 +674,15 @@ impl HwCodecConfig {
         }
         #[cfg(target_os = "ios")]
         {
-            HwCodecConfig::default()
+            let config = CONFIG.lock().unwrap().clone();
+            match config {
+                Some(c) => c,
+                None => {
+                    let c = probe_ios_videotoolbox_decoders();
+                    *CONFIG.lock().unwrap() = Some(c.clone());
+                    c
+                }
+            }
         }
     }
 

@@ -30,6 +30,7 @@ vcpkg_from_github(
     patch/0010.disable-loading-DLLs-from-app-dir.patch
     patch/0011-android-mediacodec-encode-align-64.patch
     patch/0012-fix-macos-big-sur-CVBufferCopyAttachments.patch
+    patch/0013-hwcontext-videotoolbox-drop-ios15-availability-check.patch
 )
 
 if(SOURCE_PATH MATCHES " ")
@@ -180,9 +181,10 @@ elseif(VCPKG_TARGET_IS_IOS)
 --disable-autodetect \
 --disable-hwaccels \
 --disable-encoders \
---disable-videotoolbox \
---extra-cflags=\"-arch arm64 -mios-version-min=8.0 -fembed-bitcode\" \
---extra-ldflags=\"-arch arm64 -mios-version-min=8.0 -fembed-bitcode\" \
+--enable-videotoolbox \
+--enable-hwaccel=h264_videotoolbox,hevc_videotoolbox \
+--extra-cflags=\"-arch arm64 -mios-version-min=13.0 -fembed-bitcode\" \
+--extra-ldflags=\"-arch arm64 -mios-version-min=13.0 -fembed-bitcode\" \
 ")
 elseif(VCPKG_CMAKE_SYSTEM_NAME STREQUAL "Android")
     string(APPEND OPTIONS "\
