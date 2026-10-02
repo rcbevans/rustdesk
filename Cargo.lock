@@ -3889,7 +3889,11 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 [[package]]
 name = "hwcodec"
 version = "0.7.1"
+<<<<<<< HEAD
 source = "git+https://github.com/rcbevans/hwcodec?branch=ffmpeg7-vaapi-encode#d409c53acf7431f10810655096f5f95b30ddb3a6"
+=======
+source = "git+https://github.com/rcbevans/hwcodec?branch=ffmpeg7-vaapi-encode#1e31dc29b8c040fde4fdb06f88a986a401615a88"
+>>>>>>> 4bf0b9444 (build: temporarily patch hwcodec to a fork branch for FFmpeg 7)
 dependencies = [
  "bindgen 0.59.2",
  "cc",
