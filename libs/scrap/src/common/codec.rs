@@ -683,9 +683,12 @@ impl Decoder {
     }
 
     // MediaCodec buffers input before its first output, so a no-output frame
-    // is expected during decoder warm-up; other decoders escalate immediately.
+    // is expected during decoder warm-up; a VideoToolbox session is
+    // invalidated while the app is backgrounded and errors until a keyframe
+    // restarts it. Failures of an active hardware decoder are warm-up, not a
+    // dead codec. Other decoders escalate immediately.
     pub fn warm_up_grace(&self) -> bool {
-        #[cfg(feature = "mediacodec")]
+        #[cfg(all(target_os = "android", feature = "mediacodec"))]
         {
             let mut grace = self.h264_media_codec.is_some()
                 || self.h265_media_codec.is_some()
@@ -701,7 +704,30 @@ impl Decoder {
             }
             grace
         }
-        #[cfg(not(feature = "mediacodec"))]
+        #[cfg(all(feature = "hwcodec", target_os = "ios"))]
+        {
+            self.h264_ram.as_ref().is_some_and(|d| d.is_hw())
+                || self.h265_ram.as_ref().is_some_and(|d| d.is_hw())
+        }
+        #[cfg(not(any(
+            all(target_os = "android", feature = "mediacodec"),
+            all(feature = "hwcodec", target_os = "ios")
+        )))]
+        {
+            false
+        }
+    }
+
+    // Whether the decoder surfaces its warm-up as errors rather than
+    // no-output: VideoToolbox maps the invalidated-session EAGAIN to Err.
+    // For such decoders Err is budgeted like a no-output frame; for the
+    // others an Err is a hard failure and counts immediately.
+    pub fn warm_up_errors_transient(&self) -> bool {
+        #[cfg(all(feature = "hwcodec", target_os = "ios"))]
+        {
+            self.warm_up_grace()
+        }
+        #[cfg(not(all(feature = "hwcodec", target_os = "ios")))]
         {
             false
         }
