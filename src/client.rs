@@ -110,6 +110,10 @@ pub const SEC30: Duration = Duration::from_secs(30);
 const RESTART_REMOTE_DEVICE_GRACE: Duration = Duration::from_secs(5 * 60);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
 const MAX_DECODE_FAIL_COUNTER: usize = 3;
+// A MediaCodec decoder returns no output for its first packets while it
+// buffers input (~2-3 frames observed); the first N no-output frames of a
+// decoder's life are free, after that each counts toward the fail counter.
+const WARM_UP_NO_OUTPUT_FRAMES: usize = 10;
 
 pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
 pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
@@ -2668,6 +2672,8 @@ pub struct VideoHandler {
     _display: usize, // useful for debug
     fail_counter: usize,
     first_frame: bool,
+    no_output_frames: usize,
+    decoder_size: (usize, usize),
 }
 
 impl VideoHandler {
@@ -2682,7 +2688,7 @@ impl VideoHandler {
     }
 
     /// Create a new video handler.
-    pub fn new(format: CodecFormat, _display: usize) -> Self {
+    pub fn new(format: CodecFormat, _display: usize, decoder_size: (usize, usize)) -> Self {
         let luid = Self::get_adapter_luid();
         log::info!("new video handler for display #{_display}, format: {format:?}, luid: {luid:?}");
         let rgba_format =
@@ -2692,7 +2698,7 @@ impl VideoHandler {
                 ImageFormat::ARGB
             };
         VideoHandler {
-            decoder: Decoder::new(format, luid),
+            decoder: Decoder::new(format, luid, decoder_size),
             rgb: ImageRgb::new(rgba_format, crate::get_dst_align_rgba()),
             texture: Default::default(),
             recorder: Default::default(),
@@ -2700,6 +2706,8 @@ impl VideoHandler {
             _display,
             fail_counter: 0,
             first_frame: true,
+            no_output_frames: 0,
+            decoder_size,
         }
     }
 
@@ -2727,8 +2735,23 @@ impl VideoHandler {
                 if res.as_ref().is_ok_and(|x| *x) {
                     self.fail_counter = 0;
                 } else {
-                    if self.fail_counter < usize::MAX {
-                        if self.first_frame && self.fail_counter < MAX_DECODE_FAIL_COUNTER {
+                    // The first WARM_UP_NO_OUTPUT_FRAMES no-output frames of a
+                    // MediaCodec decoder's life are warm-up, not failure; past
+                    // that each counts toward the fail counter, keeping the
+                    // bounded fallback for genuinely dead codecs. The grace is
+                    // frame-count based, so a peer cannot extend it from the
+                    // client side.
+                    if res.as_ref().is_ok_and(|x| !*x) {
+                        self.no_output_frames += 1;
+                    }
+                    let count_as_fail = !matches!(&res, Ok(false)
+                        if self.decoder.warm_up_grace()
+                            && self.no_output_frames <= WARM_UP_NO_OUTPUT_FRAMES);
+                    if count_as_fail && self.fail_counter < usize::MAX {
+                        if self.first_frame
+                            && (res.is_err() || !self.decoder.warm_up_grace())
+                            && self.fail_counter < MAX_DECODE_FAIL_COUNTER
+                        {
                             log::error!("decode first frame failed");
                             self.fail_counter = MAX_DECODE_FAIL_COUNTER;
                         } else {
@@ -2767,9 +2790,10 @@ impl VideoHandler {
         self.rgb.set_align(crate::get_dst_align_rgba());
         let luid = Self::get_adapter_luid();
         let format = format.unwrap_or(self.decoder.format());
-        self.decoder = Decoder::new(format, luid);
+        self.decoder = Decoder::new(format, luid, self.decoder_size);
         self.fail_counter = 0;
         self.first_frame = true;
+        self.no_output_frames = 0;
     }
 
     /// Start or stop screen record.
@@ -4053,7 +4077,19 @@ pub fn start_video_thread<F, T>(
                         let start = std::time::Instant::now();
                         let format = CodecFormat::from(&vf);
                         if video_handler.is_none() {
-                            let mut handler = VideoHandler::new(format, display);
+                            // The peer's display size arrives with the peer
+                            // info, before any video: MediaCodec needs real
+                            // dimensions at configure time.
+                            let decoder_size = session
+                                .lc
+                                .read()
+                                .unwrap()
+                                .peer_info
+                                .as_ref()
+                                .and_then(|p| p.displays.get(display))
+                                .map(|d| (d.width as usize, d.height as usize))
+                                .unwrap_or((1280, 720));
+                            let mut handler = VideoHandler::new(format, display, decoder_size);
                             let record_state = session.lc.read().unwrap().record_state;
                             let record_permission = session.lc.read().unwrap().record_permission;
                             let id = session.lc.read().unwrap().id.clone();
