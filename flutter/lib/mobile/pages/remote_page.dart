@@ -192,6 +192,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       trySyncClipboard();
+      if (isIOS && bind.mainGetOptionSync(key: kOptionEnableHwcodec) == 'Y') {
+        sessionRefreshVideo(sessionId, gFFI.ffiModel.pi);
+      }
     }
   }
 

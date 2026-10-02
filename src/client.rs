@@ -110,9 +110,13 @@ pub const SEC30: Duration = Duration::from_secs(30);
 const RESTART_REMOTE_DEVICE_GRACE: Duration = Duration::from_secs(5 * 60);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
 const MAX_DECODE_FAIL_COUNTER: usize = 3;
-// A MediaCodec decoder returns no output for its first packets while it
-// buffers input (~2-3 frames observed); the first N no-output frames of a
-// decoder's life are free, after that each counts toward the fail counter.
+// Decoders whose warm-up produces no output get a frame-count budget: the
+// first N no-output (or transient-error) frames of a decoder's life are
+// free, after that each counts toward the fail counter. MediaCodec buffers
+// input (~2-3 frames observed); a VideoToolbox decoder errors EAGAIN while
+// its invalidated session restarts after the app was backgrounded. The
+// budget is frame-count based, so a peer cannot extend it, and it re-arms
+// on successful output because backgrounding recurs routinely on iOS.
 const WARM_UP_NO_OUTPUT_FRAMES: usize = 10;
 
 pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
@@ -2738,24 +2742,33 @@ impl VideoHandler {
                 );
                 if res.as_ref().is_ok_and(|x| *x) {
                     self.fail_counter = 0;
+                    self.no_output_frames = 0;
                 } else {
-                    // The first WARM_UP_NO_OUTPUT_FRAMES no-output frames of a
-                    // MediaCodec decoder's life are warm-up, not failure; past
-                    // that each counts toward the fail counter, keeping the
-                    // bounded fallback for genuinely dead codecs. The grace is
-                    // frame-count based, so a peer cannot extend it from the
-                    // client side.
-                    if res.as_ref().is_ok_and(|x| !*x) {
+                    // Decoders whose warm-up produces no output get the
+                    // frame-count budget: MediaCodec buffers input (Ok(false));
+                    // VideoToolbox surfaces its invalidated-session restarts
+                    // as Err. Err is budgeted only for decoders that declare
+                    // their warm-up errors transient (VideoToolbox); for the
+                    // others it counts immediately (master semantics). Past
+                    // the budget every failure counts, keeping the bounded
+                    // fallback for genuinely dead codecs. The budget is
+                    // frame-count based, so a peer cannot extend it.
+                    let budgeted = match &res {
+                        Ok(false) => true,
+                        Err(_) => self.decoder.warm_up_errors_transient(),
+                        _ => false,
+                    };
+                    if budgeted {
                         self.no_output_frames += 1;
                     }
-                    let count_as_fail = !matches!(&res, Ok(false)
-                        if self.decoder.warm_up_grace()
-                            && self.no_output_frames <= WARM_UP_NO_OUTPUT_FRAMES);
+                    let count_as_fail = if budgeted {
+                        !self.decoder.warm_up_grace()
+                            || self.no_output_frames > WARM_UP_NO_OUTPUT_FRAMES
+                    } else {
+                        true
+                    };
                     if count_as_fail && self.fail_counter < usize::MAX {
-                        if self.first_frame
-                            && (res.is_err() || !self.decoder.warm_up_grace())
-                            && self.fail_counter < MAX_DECODE_FAIL_COUNTER
-                        {
+                        if self.first_frame && self.fail_counter < MAX_DECODE_FAIL_COUNTER {
                             log::error!("decode first frame failed");
                             self.fail_counter = MAX_DECODE_FAIL_COUNTER;
                         } else {
