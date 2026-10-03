@@ -2803,7 +2803,7 @@ impl VideoHandler {
             "reset video handler for display #{}, format: {format:?}",
             self._display
         );
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
         self.rgb.set_align(crate::get_dst_align_rgba());
         let luid = Self::get_adapter_luid();
         let format = format.unwrap_or(self.decoder.format());

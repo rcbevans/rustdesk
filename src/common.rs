@@ -2438,7 +2438,7 @@ fn read_custom_client_advanced_settings(
 }
 
 #[inline]
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub fn get_dst_align_rgba() -> usize {
     // https://developer.apple.com/forums/thread/712709
     // Memory alignment should be multiple of 64.
