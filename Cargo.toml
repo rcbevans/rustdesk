@@ -60,6 +60,8 @@ serde_json = "1.0"
 serde_repr = "0.1"
 cfg-if = "1.0"
 lazy_static = "1.4"
+# iOS loads the texture_rgba_renderer plugin via open_self(); hbb_common's dlopen re-export is desktop-only.
+dlopen = "0.1"
 sha2 = "0.10"
 repng = "0.2"
 zstd = "0.13"

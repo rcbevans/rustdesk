@@ -157,6 +157,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // down. The reconnect then re-attaches to the leaked session and is stuck on
     // "Connecting...". Dispatching it here makes teardown happen synchronously on
     // pop; the `sessionClose` in `gFFI.close()` becomes a no-op once removed.
+    // Unregister the textures while the session is still alive.
+    gFFI.textureModel.onRemotePageDispose(true);
     unawaited(bind.sessionClose(sessionId: sessionId));
     HwDecodeSurface.destroy(sessionId.toString(), 0);
     gFFI.textureModel.setGpuTextureId(display: 0, id: -1);
