@@ -578,7 +578,12 @@ impl Decoder {
             }
             CodecFormat::H264 => {
                 #[cfg(feature = "vram")]
-                if !valid && enable_vram_option(false) && _luid.clone().unwrap_or_default() != 0 {
+                if !valid
+                    && enable_vram_option(false)
+                    // macOS has a single VideoToolbox device and no adapter
+                    // luid; the d3d11 adapter check does not apply.
+                    && (cfg!(target_os = "macos") || _luid.clone().unwrap_or_default() != 0)
+                {
                     match VRamDecoder::new(format, _luid) {
                         Ok(v) => h264_vram = Some(v),
                         Err(e) => log::error!("create H264 vram decoder failed: {}", e),
@@ -605,7 +610,10 @@ impl Decoder {
             }
             CodecFormat::H265 => {
                 #[cfg(feature = "vram")]
-                if !valid && enable_vram_option(false) && _luid.clone().unwrap_or_default() != 0 {
+                if !valid
+                    && enable_vram_option(false)
+                    && (cfg!(target_os = "macos") || _luid.clone().unwrap_or_default() != 0)
+                {
                     match VRamDecoder::new(format, _luid) {
                         Ok(v) => h265_vram = Some(v),
                         Err(e) => log::error!("create H265 vram decoder failed: {}", e),
@@ -1098,9 +1106,10 @@ pub fn enable_hwcodec_option() -> bool {
 }
 #[cfg(feature = "vram")]
 pub fn enable_vram_option(encode: bool) -> bool {
-    use base::config::keys::OPTION_ENABLE_HWCODEC;
+    #[cfg(windows)]
+    {
+        use base::config::keys::OPTION_ENABLE_HWCODEC;
 
-    if cfg!(windows) {
         let enable = option2bool(
             OPTION_ENABLE_HWCODEC,
             &Config::get_option(OPTION_ENABLE_HWCODEC),
@@ -1110,7 +1119,16 @@ pub fn enable_vram_option(encode: bool) -> bool {
         } else {
             enable && allow_d3d_render()
         }
-    } else {
+    }
+    // Zero-copy VideoToolbox decode tier; encode is not implemented.
+    #[cfg(target_os = "macos")]
+    {
+        use base::config::keys::OPTION_USE_VRAM_RENDER;
+        // Machine-local hardware capability, like the texture-render health.
+        !encode && LocalConfig::get_option(OPTION_USE_VRAM_RENDER) == "Y"
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
         false
     }
 }

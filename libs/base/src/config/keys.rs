@@ -29,6 +29,8 @@ pub const OPTION_TEXTURE_RENDER: &str = "use-texture-render";
 // "failed-*" flips the texture-render default to opt-in on this machine.
 pub const OPTION_TEXTURE_RENDER_HEALTH: &str = "texture-render-health";
 pub const OPTION_ALLOW_D3D_RENDER: &str = "allow-d3d-render";
+// macOS VRAM (zero-copy VideoToolbox) decode tier; opt-in while unproven.
+pub const OPTION_USE_VRAM_RENDER: &str = "use-vram-render";
 pub const OPTION_ENABLE_CHECK_UPDATE: &str = "enable-check-update";
 pub const OPTION_ALLOW_AUTO_UPDATE: &str = "allow-auto-update";
 pub const OPTION_SYNC_AB_WITH_RECENT_SESSIONS: &str = "sync-ab-with-recent-sessions";
