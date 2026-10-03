@@ -776,6 +776,16 @@ pub fn start_check_process() {
     if !enable_hwcodec_option() || HwCodecConfig::already_set() {
         return;
     }
+    // A valid cached config (signature matches, decoders enumerated) makes
+    // the probe a no-op, so both the server and the viewer process can call
+    // this without duplicate probes.
+    #[cfg(any(windows, target_os = "macos"))]
+    {
+        let c = HwCodecConfig::get();
+        if !c.ram_encode.is_empty() || !c.ram_decode.is_empty() {
+            return;
+        }
+    }
     use hbb_common::allow_err;
     use std::sync::Once;
     let f = || {

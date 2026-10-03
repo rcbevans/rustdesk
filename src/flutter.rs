@@ -1661,10 +1661,10 @@ pub mod connection_manager {
     }
 
     #[inline]
-    pub fn cm_init() {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        start_listen_ipc();
-    }
+pub fn cm_init() {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter::connection_manager::cm_init();
+}
 
     #[cfg(target_os = "android")]
     use hbb_common::tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
