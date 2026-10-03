@@ -2697,8 +2697,12 @@ impl VideoHandler {
             } else {
                 ImageFormat::ARGB
             };
+        #[allow(unused_mut)]
+        let mut decoder = Decoder::new(format, luid, decoder_size);
+        #[cfg(all(target_os = "android", feature = "mediacodec"))]
+        decoder.init_surface_decoder(format, _display, decoder_size);
         VideoHandler {
-            decoder: Decoder::new(format, luid, decoder_size),
+            decoder,
             rgb: ImageRgb::new(rgba_format, crate::get_dst_align_rgba()),
             texture: Default::default(),
             recorder: Default::default(),
@@ -2791,6 +2795,9 @@ impl VideoHandler {
         let luid = Self::get_adapter_luid();
         let format = format.unwrap_or(self.decoder.format());
         self.decoder = Decoder::new(format, luid, self.decoder_size);
+        #[cfg(all(target_os = "android", feature = "mediacodec"))]
+        self.decoder
+            .init_surface_decoder(format, self._display, self.decoder_size);
         self.fail_counter = 0;
         self.first_frame = true;
         self.no_output_frames = 0;

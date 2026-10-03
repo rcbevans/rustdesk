@@ -4285,6 +4285,16 @@ class FFI {
           final rgba = platformFFI.getRgba(sessionId, display, sz);
           if (rgba != null) {
             onEvent2UIRgba();
+            // A pixel frame means the texture path is no longer producing
+            // frames (surface decoder fell back); drop the stale texture
+            // type so the widget switches back to the pixel painter. Only
+            // the type flips - gpuTextureId is kept for the surface
+            // decoder's re-creation after a reset. Android only: on
+            // desktop the texture id belongs to the rgba pixelbuffer
+            // texture and must survive rgba events.
+            if (isAndroid) {
+              textureModel.setTextureType(display: display, gpuTexture: false);
+            }
             await imageModel.onRgba(display, rgba);
           } else {
             platformFFI.nextRgba(sessionId, display);

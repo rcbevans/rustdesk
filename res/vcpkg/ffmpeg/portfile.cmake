@@ -75,8 +75,11 @@ set(OPTIONS "\
 --disable-postproc \
 --enable-decoder=h264 \
 --enable-decoder=hevc \
+--enable-decoder=vp9 \
+--enable-decoder=av1 \
 --enable-parser=h264 \
 --enable-parser=hevc \
+--enable-parser=vp9 \
 --enable-bsf=h264_mp4toannexb \
 --enable-bsf=hevc_mp4toannexb  \
 --enable-bsf=h264_metadata \

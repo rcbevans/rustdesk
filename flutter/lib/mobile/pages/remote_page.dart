@@ -21,6 +21,7 @@ import '../../common/widgets/remote_input.dart';
 import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../../utils/hw_decode_surface.dart';
 import '../../utils/image.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
@@ -138,6 +139,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (gFFI.ffiModel.pi.isSet.value) {
       _initWaylandKeyboardGateIfNeeded();
     }
+    HwDecodeSurface.create(sessionId.toString(), 0).then((id) {
+      if (!mounted) return;
+      if (id >= 0) {
+        gFFI.textureModel.setGpuTextureId(display: 0, id: id);
+      }
+    });
   }
 
   @override
@@ -151,6 +158,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // "Connecting...". Dispatching it here makes teardown happen synchronously on
     // pop; the `sessionClose` in `gFFI.close()` becomes a no-op once removed.
     unawaited(bind.sessionClose(sessionId: sessionId));
+    HwDecodeSurface.destroy(sessionId.toString(), 0);
+    gFFI.textureModel.setGpuTextureId(display: 0, id: -1);
+    gFFI.textureModel.setTextureType(display: 0, gpuTexture: false);
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);
@@ -1154,10 +1164,45 @@ class ImagePaint extends StatelessWidget {
       }
     }
     final adjust = c.getAdjustY();
-    return CustomPaint(
-      painter: ImagePainter(
-          image: m.image, x: c.x / s, y: (c.y + adjust) / s, scale: s),
-    );
+    return Obx(() {
+      // Android zero-copy hardware decoding paints the registered
+      // SurfaceTexture directly; textureID stays -1 until the first
+      // surface-decoded frame is notified, which keeps the rgba fallback.
+      final textureId = ffiModel.parent.target?.textureModel
+          .getTextureId(ffiModel.pi.currentDisplay)
+          .value;
+      if (textureId != null && textureId >= 0) {
+        // Physical frame dims (same values the pixel path draws), NOT the
+        // peer display's logical dims: they differ when the peer runs a
+        // HiDPI scale, and the texture must map 1:1 like the image path.
+        final rect = ffiModel.pi.getDisplayRect(ffiModel.pi.currentDisplay);
+        if (rect != null && rect.width > 0 && rect.height > 0) {
+          // OverflowBox: the Stack lays non-positioned children out with
+          // loose constraints, so a SizedBox of the peer's (much larger)
+          // display rect would clamp to the viewport and paint a tiny,
+          // distorted picture. OverflowBox lets the child keep the peer's
+          // full size in layout; Transform then maps it exactly like the
+          // pixel path's painter.
+          return Transform(
+            transform: Matrix4.identity()
+              ..translate(c.x, c.y + adjust)
+              ..scale(s, s),
+            child: OverflowBox(
+              alignment: Alignment.topLeft,
+              minWidth: rect.width.toDouble(),
+              maxWidth: rect.width.toDouble(),
+              minHeight: rect.height.toDouble(),
+              maxHeight: rect.height.toDouble(),
+              child: Texture(textureId: textureId),
+            ),
+          );
+        }
+      }
+      return CustomPaint(
+        painter: ImagePainter(
+            image: m.image, x: c.x / s, y: (c.y + adjust) / s, scale: s),
+      );
+    });
   }
 }
 

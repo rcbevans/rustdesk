@@ -3,6 +3,8 @@ use ndk::media::{
     media_codec::{MediaCodec, MediaCodecDirection, MediaFormat},
     NdkMediaError,
 };
+#[cfg(target_os = "android")]
+use ndk::native_window::NativeWindow;
 use std::ops::Deref;
 use std::{
     io::Write,
@@ -11,7 +13,7 @@ use std::{
 };
 
 use crate::ImageFormat;
-use crate::{CodecFormat, I420ToABGR, I420ToARGB, ImageRgb};
+use crate::{CodecFormat, I420ToABGR, I420ToARGB, ImageRgb, ImageTexture};
 
 /// MediaCodec mime type name
 const H264_MIME_TYPE: &str = "video/avc";
@@ -224,6 +226,130 @@ impl MediaCodecDecoder {
             }
         }
         Ok(())
+    }
+}
+
+// Renders directly into a SurfaceTexture registered by the flutter engine, so
+// no pixel readback happens.
+#[cfg(target_os = "android")]
+pub struct MediaCodecSurfaceDecoder {
+    decoder: MediaCodec,
+    // The decoder owns a window reference: AMediaCodec uses the window beyond
+    // configure, and the registry entry may already be released meanwhile.
+    #[allow(dead_code)]
+    window: NativeWindow,
+    texture_id: i64,
+    width: i32,
+    height: i32,
+}
+
+#[cfg(target_os = "android")]
+impl Deref for MediaCodecSurfaceDecoder {
+    type Target = MediaCodec;
+
+    fn deref(&self) -> &Self::Target {
+        &self.decoder
+    }
+}
+
+#[cfg(target_os = "android")]
+impl MediaCodecSurfaceDecoder {
+    pub fn new(
+        format: CodecFormat,
+        width: i32,
+        height: i32,
+        window: &NativeWindow,
+        texture_id: i64,
+    ) -> Option<MediaCodecSurfaceDecoder> {
+        let mime = match format {
+            CodecFormat::H264 => H264_MIME_TYPE,
+            CodecFormat::H265 => H265_MIME_TYPE,
+            CodecFormat::VP9 => VP9_MIME_TYPE,
+            CodecFormat::AV1 => AV1_MIME_TYPE,
+            _ => {
+                log::error!("Unsupported codec format for surface decoder: {:?}", format);
+                return None;
+            }
+        };
+        let codec = MediaCodec::from_decoder_type(mime)?;
+        let media_format = MediaFormat::new();
+        media_format.set_str("mime", mime);
+        media_format.set_i32("width", width);
+        media_format.set_i32("height", height);
+        // The color format is chosen by the codec in surface mode.
+        if let Err(e) = codec.configure(&media_format, Some(window), MediaCodecDirection::Decoder)
+        {
+            log::error!("Failed to init surface decoder: {:?}", e);
+            return None;
+        };
+        log::info!("surface decoder init success");
+        if let Err(e) = codec.start() {
+            log::error!("Failed to start surface decoder: {:?}", e);
+            return None;
+        };
+        log::debug!("Init surface decoder succeeded!: {:?}", mime);
+        return Some(MediaCodecSurfaceDecoder {
+            decoder: codec,
+            window: window.clone(),
+            texture_id,
+            width,
+            height,
+        });
+    }
+
+    // Ok(true) = a frame was rendered to the surface; Ok(false) = no output
+    // was available this call (decoder warm-up or no new frame).
+    pub fn decode(&mut self, data: &[u8]) -> ResultType<bool> {
+        match self.dequeue_input_buffer(Duration::from_millis(10))? {
+            Some(mut input_buffer) => {
+                let mut buf = input_buffer.buffer_mut();
+                if data.len() > buf.len() {
+                    // InputBuffer has no Drop: it is only recycled by
+                    // queue_input_buffer, so return it or it is lost and the
+                    // decoder stalls after a few oversized frames.
+                    if let Err(e) = self.queue_input_buffer(input_buffer, 0, 0, 0, 0) {
+                        log::debug!("Failed to recycle oversized input buffer: {e}");
+                    }
+                    bail!("The input data size is bigger than input buf");
+                }
+                buf.write_all(&data)?;
+                self.queue_input_buffer(input_buffer, 0, data.len(), 0, 0)?;
+            }
+            None => {
+                log::trace!("No available input buffer");
+            }
+        };
+
+        let output_buffer = match self.dequeue_output_buffer(Duration::from_millis(100)) {
+            Ok(Some(output_buffer)) => output_buffer,
+            Ok(None) => return Ok(false),
+            Err(err) => {
+                // c2 reports INFO_OUTPUT_FORMAT_CHANGED (-2) after the first
+                // input buffer and INFO_OUTPUT_BUFFERS_CHANGED (-3) on buffer
+                // reallocation; both mean no output this dequeue.
+                if matches!(
+                    &err,
+                    NdkMediaError::UnknownResult(m)
+                        if m.0 == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED
+                            || m.0 == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED
+                ) {
+                    return Ok(false);
+                }
+                return Err(err.into());
+            }
+        };
+        // render=true hands the buffer to the surface; the engine's
+        // onFrameAvailableListener then marks the texture for repaint.
+        self.release_output_buffer(output_buffer, true)?;
+        Ok(true)
+    }
+
+    pub fn texture(&self) -> ImageTexture {
+        ImageTexture {
+            texture: self.texture_id as _,
+            w: self.width as _,
+            h: self.height as _,
+        }
     }
 }
 
