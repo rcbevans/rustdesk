@@ -29,9 +29,13 @@ class _PixelbufferTexture {
 
     textureRenderer.createTexture(_textureKey).then((id) async {
       _id = id;
+      // destroy() may have started while the future was in flight; registering
+      // afterwards would re-arm a texture Rust must not write to.
+      if (_destroying) return;
       if (id != -1) {
         ffi.textureModel.setRgbaTextureId(display: d, id: id);
         final ptr = await textureRenderer.getTexturePtr(_textureKey);
+        if (_destroying) return;
         platformFFI.registerPixelbufferTexture(sessionId, display, ptr);
         debugPrint(
             "create pixelbuffer texture: peerId: ${ffi.id} display:$_display, textureId:$id, texturePtr:$ptr");
@@ -78,10 +82,13 @@ class _GpuTexture {
 
       gpuTextureRenderer.registerTexture().then((id) async {
         _id = id;
+        // destroy() may have started while the future was in flight.
+        if (_destroying) return;
         if (id != null) {
           _textureId = id;
           ffi.textureModel.setGpuTextureId(display: d, id: id);
           final output = await gpuTextureRenderer.output(id);
+          if (_destroying) return;
           _output = output;
           if (output != null) {
             platformFFI.registerGpuTexture(sessionId, d, output);
