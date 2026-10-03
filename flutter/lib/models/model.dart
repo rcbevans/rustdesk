@@ -2054,7 +2054,7 @@ class ImageModel with ChangeNotifier {
 
   updateUserTextureRender() {
     final preValue = _useTextureRender;
-    _useTextureRender = isDesktop && bind.mainGetUseTextureRender();
+    _useTextureRender = bind.mainGetUseTextureRender();
     if (preValue != _useTextureRender) {
       notifyListeners();
     }
@@ -4213,7 +4213,7 @@ class FFI {
       }
       ffiModel.pi.currentDisplay = display;
     }
-    if (isDesktop && connType == ConnType.defaultConn) {
+    if ((isDesktop || isIOS) && connType == ConnType.defaultConn) {
       textureModel.updateCurrentDisplay(display ?? 0);
     }
     // FIXME: separate cameras displays or shift all indices.
