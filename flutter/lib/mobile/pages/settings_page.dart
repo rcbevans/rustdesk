@@ -82,6 +82,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _enableDirectIPAccess = false;
   var _enableRecordSession = false;
   var _enableHardwareCodec = false;
+  var _useTextureRender = false;
   var _allowWebSocket = false;
   var _autoRecordIncomingSession = false;
   var _autoRecordOutgoingSession = false;
@@ -123,6 +124,9 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     if (isIOS)
       _enableHardwareCodec =
           bind.mainGetOptionSync(key: kOptionEnableHwcodec) == 'Y';
+    if (isIOS)
+      _useTextureRender =
+          bind.mainGetOptionSync(key: kOptionTextureRender) == 'Y';
     _allowWebSocket = mainGetBoolOptionSync(kOptionAllowWebSocket);
     _allowInsecureTlsFallback =
         mainGetBoolOptionSync(kOptionAllowInsecureTLSFallback);
@@ -964,6 +968,19 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                               'Y';
                       setState(() {
                         _enableHardwareCodec = newValue;
+                      });
+                    },
+            ),
+            SettingsTile.switchTile(
+              title: Text(translate('Use texture rendering')),
+              initialValue: _useTextureRender,
+              onToggle: isOptionFixed(kOptionTextureRender)
+                  ? null
+                  : (v) async {
+                      await bind.mainSetLocalOption(
+                          key: kOptionTextureRender, value: v ? 'Y' : 'N');
+                      setState(() {
+                        _useTextureRender = v;
                       });
                     },
             ),

@@ -717,7 +717,15 @@ class FfiModel with ChangeNotifier {
 
   _handleUseTextureRender(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
-    parent.target?.imageModel.setUseTextureRender(evt['v'] == 'Y');
+    final enabled = evt['v'] == 'Y';
+    parent.target?.imageModel.setUseTextureRender(enabled);
+    // The option flips Rust's render path live; iOS must create or drop this
+    // session's rgba textures to match or the painter shows a stale texture /
+    // freezes. Desktop creates textures for every session up front, Android's
+    // tier is decoder-driven.
+    if (isIOS) {
+      parent.target?.textureModel.syncTextureRenderOption(enabled);
+    }
     waitForFirstImage.value = true;
     isRefreshing = true;
     showConnectedWaitingForImage(parent.target!.dialogManager, sessionId,
@@ -4179,7 +4187,8 @@ class FFI {
       }
       ffiModel.pi.currentDisplay = display;
     }
-    if ((isDesktop || isIOS) && connType == ConnType.defaultConn) {
+    if ((isDesktop || (isIOS && bind.mainGetUseTextureRender())) &&
+        connType == ConnType.defaultConn) {
       textureModel.updateCurrentDisplay(display ?? 0);
     }
     // FIXME: separate cameras displays or shift all indices.

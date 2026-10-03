@@ -147,6 +147,29 @@ class TextureModel {
 
   TextureModel(this.parent);
 
+  /// iOS only: the texture-render option toggles live while a session runs.
+  /// Rust switches between writing the rgba texture and the rgba event path
+  /// with it, so this session's textures must follow or the painter either
+  /// shows a stale texture or freezes on the last pixel frame. Enable creates
+  /// any missing texture for the current display; disable unregisters and
+  /// drops them - the painter falls back to pixels whenever no id is
+  /// registered.
+  syncTextureRenderOption(bool enabled) {
+    final ffi = parent.target;
+    if (ffi == null) return;
+    final display = ffi.ffiModel.pi.currentDisplay;
+    if (enabled) {
+      updateCurrentDisplay(display);
+    } else {
+      setRgbaTextureId(display: display, id: -1);
+      setGpuTextureId(display: display, id: -1);
+      setTextureType(display: display, gpuTexture: false);
+      _pixelbufferRenderTextures.remove(display)?.destroy(true, ffi);
+      _gpuRenderTextures.remove(display)?.destroy(true, ffi);
+      _control.remove(display);
+    }
+  }
+
   setTextureType({required int display, required bool gpuTexture}) {
     debugPrint("setTextureType: display=$display, isGpuTexture=$gpuTexture");
     ensureControl(display);
