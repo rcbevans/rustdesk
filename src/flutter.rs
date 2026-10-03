@@ -601,6 +601,16 @@ impl VideoRenderer {
         if let Some(func) = &self.on_nv12_func {
             let stride = scrap::nv12_stride(rgba.w + (rgba.w & 1), rgba.align());
             let y_size = stride * rgba.h;
+            // Layout is guaranteed by the to_fmt arm that fills this format;
+            // refuse to cross the FFI if any producer ever drifts from it.
+            if rgba.raw.len() < y_size + stride * ((rgba.h + 1) / 2) {
+                log::error!(
+                    "nv12 buffer too small: {} < {}, dropping",
+                    rgba.raw.len(),
+                    y_size + stride * ((rgba.h + 1) / 2)
+                );
+                return false;
+            }
             unsafe {
                 func(
                     info.gpu_output_ptr as _,
@@ -944,10 +954,10 @@ impl InvokeUiSession for FlutterHandler {
         #[cfg(all(target_os = "linux", feature = "hwcodec"))]
         if rgba.fmt() == scrap::ImageFormat::NV12 {
             // NV12 only flows to the gpu texture renderer; the pixelbuffer
-            // and soft renderers only understand rgba. Can happen when the
-            // texture-render option is toggled off mid-session (the decoder
-            // keeps the format it was created with, like the windows vram
-            // path) — drop until the session restarts.
+            // and soft renderers only understand rgba. Only reachable while
+            // frames posted before the texture-render option was toggled
+            // off are still in flight — reset(None) (sent by the toggle)
+            // recomputes the format, so this is bounded.
             if use_texture_render {
                 self.on_nv12(display, rgba);
             }

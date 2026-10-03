@@ -2687,25 +2687,29 @@ impl VideoHandler {
         None
     }
 
+    /// The image format decoder output goes into. The linux gpu texture
+    /// renderer consumes NV12 straight from hardware decode (no libyuv
+    /// conversion); every other path, and any software decoder (software
+    /// ffmpeg outputs YUV420P, vpx/aom fill rgba), needs rgba.
+    fn pick_rgba_format(format: &CodecFormat) -> ImageFormat {
+        #[cfg(all(target_os = "linux", feature = "hwcodec", feature = "flutter"))]
+        if crate::flutter::gpu_texture_render_available()
+            && matches!(format, CodecFormat::H264 | CodecFormat::H265)
+        {
+            return ImageFormat::NV12;
+        }
+        if cfg!(feature = "flutter") && (cfg!(windows) || cfg!(target_os = "linux")) {
+            ImageFormat::ABGR
+        } else {
+            ImageFormat::ARGB
+        }
+    }
+
     /// Create a new video handler.
     pub fn new(format: CodecFormat, _display: usize, decoder_size: (usize, usize)) -> Self {
         let luid = Self::get_adapter_luid();
         log::info!("new video handler for display #{_display}, format: {format:?}, luid: {luid:?}");
-        let rgba_format =
-            if cfg!(feature = "flutter") && (cfg!(windows) || cfg!(target_os = "linux")) {
-                ImageFormat::ABGR
-            } else {
-                ImageFormat::ARGB
-            };
-        // The gpu texture renderer on linux consumes NV12 straight from the
-        // hardware decoder (no libyuv conversion); fall back to rgba when the
-        // option is off or the plugin is missing.
-        #[cfg(all(target_os = "linux", feature = "hwcodec", feature = "flutter"))]
-        let rgba_format = if crate::flutter::gpu_texture_render_available() {
-            ImageFormat::NV12
-        } else {
-            rgba_format
-        };
+        let rgba_format = Self::pick_rgba_format(&format);
         VideoHandler {
             decoder: Decoder::new(format, luid, decoder_size),
             rgb: ImageRgb::new(rgba_format, crate::get_dst_align_rgba()),
@@ -2795,10 +2799,16 @@ impl VideoHandler {
             "reset video handler for display #{}, format: {format:?}",
             self._display
         );
+        let format = format.unwrap_or(self.decoder.format());
+        // The output format depends on the negotiated codec (nv12 only for
+        // hardware h264/h265); recompute so a codec switch (e.g. hardware
+        // death falling back to software, or the texture-render option
+        // toggled off) recovers instead of feeding the wrong format to the
+        // renderer forever.
+        self.rgb = ImageRgb::new(Self::pick_rgba_format(&format), crate::get_dst_align_rgba());
         #[cfg(target_os = "macos")]
         self.rgb.set_align(crate::get_dst_align_rgba());
         let luid = Self::get_adapter_luid();
-        let format = format.unwrap_or(self.decoder.format());
         self.decoder = Decoder::new(format, luid, self.decoder_size);
         self.fail_counter = 0;
         self.first_frame = true;

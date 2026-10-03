@@ -405,6 +405,9 @@ impl HwRamDecoderImage<'_> {
                     .copy_from_slice(&frame.data[0][src..src + rgb.w]);
             }
             let uv_bytes = even_w.min(frame.linesize[1] as usize);
+            // ffmpeg nv12 linesize[1] >= even_w in practice; if a decoder
+            // ever shipped a packed odd-width plane, the last chroma texel
+            // of the row stays zero (cosmetic) rather than over-reading.
             for row in 0..uv_height {
                 let src = row * frame.linesize[1] as usize;
                 rgb.raw[y_size + row * stride..y_size + row * stride + uv_bytes]
