@@ -570,17 +570,15 @@ struct HwCodecConfig2 {
 impl HwCodecConfig {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn set(config: String) {
-        let config = serde_json::from_str(&config).unwrap_or_default();
+        // The check process is the probe authority; keep its JSON verbatim so
+        // a server built without, say, the vram feature cannot strip fields
+        // it does not know about when it persists the config.
+        let config_parsed = serde_json::from_str::<HwCodecConfig>(&config).unwrap_or_default();
         log::info!("set hwcodec config");
-        log::debug!("{config:?}");
+        log::debug!("{config_parsed:?}");
         #[cfg(any(windows, target_os = "macos"))]
-        hbb_common::config::common_store(
-            &HwCodecConfig2 {
-                config: serde_json::to_string_pretty(&config).unwrap_or_default(),
-            },
-            "_hwcodec",
-        );
-        *CONFIG.lock().unwrap() = Some(config);
+        hbb_common::config::common_store(&HwCodecConfig2 { config }, "_hwcodec");
+        *CONFIG.lock().unwrap() = Some(config_parsed);
         *CONFIG_SET_BY_IPC.lock().unwrap() = true;
     }
 
