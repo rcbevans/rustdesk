@@ -124,9 +124,9 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     if (isIOS)
       _enableHardwareCodec =
           bind.mainGetOptionSync(key: kOptionEnableHwcodec) == 'Y';
-    if (isIOS)
-      _useTextureRender =
-          bind.mainGetOptionSync(key: kOptionTextureRender) == 'Y';
+    if (isIOS) {
+      _useTextureRender = bind.mainGetUseTextureRender();
+    }
     _allowWebSocket = mainGetBoolOptionSync(kOptionAllowWebSocket);
     _allowInsecureTlsFallback =
         mainGetBoolOptionSync(kOptionAllowInsecureTLSFallback);
