@@ -219,6 +219,16 @@ pub fn use_texture_render() -> bool {
     }
 }
 
+/// macOS zero-copy VideoToolbox decode tier. The vram feature alone must not
+/// change runtime behavior: everything the gpu texture tier touches
+/// (registration, paint state) keys off this, so option off runs the exact
+/// pre-vram path.
+#[inline]
+#[cfg(all(target_os = "macos", feature = "vram"))]
+pub fn use_vram_render() -> bool {
+    LocalConfig::get_option(keys::OPTION_USE_VRAM_RENDER) == "Y"
+}
+
 #[inline]
 pub fn is_option_fixed(key: &str) -> bool {
     config::OVERWRITE_DISPLAY_SETTINGS

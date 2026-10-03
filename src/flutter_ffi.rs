@@ -2517,8 +2517,20 @@ pub fn main_has_file_clipboard() -> SyncReturn<bool> {
 }
 
 pub fn main_has_gpu_texture_render() -> SyncReturn<bool> {
+    #[cfg(all(target_os = "macos", feature = "vram"))]
+    {
+        // The vram feature alone must not change any runtime behavior: the
+        // gpu texture tier (registration and paint state) activates only
+        // when the machine-local option turns it on. Option off = the
+        // exact pre-vram code path.
+        SyncReturn(crate::ui_interface::use_vram_render())
+    }
     // Android decodes to a SurfaceTexture registered by the flutter engine,
     // so its texture notify uses the same gpuTexture=true event.
+    #[cfg(any(
+        not(target_os = "macos"),
+        all(target_os = "macos", not(feature = "vram"))
+    ))]
     SyncReturn(cfg!(any(feature = "vram", target_os = "android")))
 }
 
