@@ -2697,6 +2697,15 @@ impl VideoHandler {
             } else {
                 ImageFormat::ARGB
             };
+        // The gpu texture renderer on linux consumes NV12 straight from the
+        // hardware decoder (no libyuv conversion); fall back to rgba when the
+        // option is off or the plugin is missing.
+        #[cfg(all(target_os = "linux", feature = "hwcodec", feature = "flutter"))]
+        let rgba_format = if crate::flutter::gpu_texture_render_available() {
+            ImageFormat::NV12
+        } else {
+            rgba_format
+        };
         VideoHandler {
             decoder: Decoder::new(format, luid, decoder_size),
             rgb: ImageRgb::new(rgba_format, crate::get_dst_align_rgba()),

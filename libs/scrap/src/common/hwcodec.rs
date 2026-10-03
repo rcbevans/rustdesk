@@ -1,7 +1,7 @@
 use crate::{
     codec::{base_bitrate, codec_thread_num, enable_hwcodec_option, EncoderApi, EncoderCfg},
     convert::*,
-    CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
+    nv12_stride, CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
 use base::message_proto::{EncodedVideoFrame, EncodedVideoFrames, VideoFrame};
 use hbb_common::{
@@ -385,6 +385,33 @@ impl HwRamDecoderImage<'_> {
         rgb.w = width as _;
         rgb.h = height as _;
         let dst_align = rgb.align();
+        if rgb.fmt() == ImageFormat::NV12 {
+            // GPU texture render: hand the already-decoded planes to the
+            // plugin untouched; it converts in-shader. Layout is
+            // nv12_stride-documented: Y at [0, stride*h), UV right after.
+            if frame.pixfmt != AVPixelFormat::AV_PIX_FMT_NV12 {
+                bail!("nv12 output requires an nv12 decoder frame");
+            }
+            // The UV plane is ceil(w/2) sample pairs (2 bytes each); even the
+            // width so one stride serves both planes.
+            let even_w = rgb.w + (rgb.w & 1);
+            let stride = nv12_stride(even_w, dst_align);
+            let uv_height = (rgb.h + 1) / 2;
+            let y_size = stride * rgb.h;
+            rgb.raw.resize(y_size + stride * uv_height, 0);
+            for row in 0..rgb.h {
+                let src = row * frame.linesize[0] as usize;
+                rgb.raw[row * stride..row * stride + rgb.w]
+                    .copy_from_slice(&frame.data[0][src..src + rgb.w]);
+            }
+            let uv_bytes = even_w.min(frame.linesize[1] as usize);
+            for row in 0..uv_height {
+                let src = row * frame.linesize[1] as usize;
+                rgb.raw[y_size + row * stride..y_size + row * stride + uv_bytes]
+                    .copy_from_slice(&frame.data[1][src..src + uv_bytes]);
+            }
+            return Ok(());
+        }
         let bytes_per_row = (rgb.w * 4 + dst_align - 1) & !(dst_align - 1);
         rgb.raw.resize(rgb.h * bytes_per_row, 0);
         match frame.pixfmt {

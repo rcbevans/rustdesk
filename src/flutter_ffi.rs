@@ -2471,6 +2471,11 @@ pub fn main_has_file_clipboard() -> SyncReturn<bool> {
 }
 
 pub fn main_has_gpu_texture_render() -> SyncReturn<bool> {
+    #[cfg(all(target_os = "linux", feature = "hwcodec"))]
+    {
+        SyncReturn(crate::flutter::gpu_texture_render_available())
+    }
+    #[cfg(not(all(target_os = "linux", feature = "hwcodec")))]
     SyncReturn(cfg!(feature = "vram"))
 }
 

@@ -58,11 +58,12 @@ pub mod record;
 mod vpx;
 
 #[repr(usize)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ImageFormat {
     Raw,
     ABGR,
     ARGB,
+    NV12,
 }
 
 #[repr(C)]
@@ -73,6 +74,14 @@ pub struct ImageRgb {
     pub h: usize,
     pub fmt: ImageFormat,
     pub align: usize,
+}
+
+/// Stride of the NV12 planes posted to the gpu texture renderer plugin: the
+/// Y plane lives at `stride * h`, the UV plane (`stride * ceil(h / 2)`)
+/// directly after, both with `stride` row pitch.
+#[inline]
+pub fn nv12_stride(w: usize, align: usize) -> usize {
+    (w + align - 1) & !(align - 1)
 }
 
 impl ImageRgb {
@@ -434,6 +443,9 @@ pub trait GoogleImage {
         let bytes_per_pixel = match fmt {
             ImageFormat::Raw => 3,
             ImageFormat::ARGB | ImageFormat::ABGR => 4,
+            // Y row bytes; the UV plane follows with the same stride, see
+            // nv12_stride. Only HwRamDecoderImage::to_fmt fills this format.
+            ImageFormat::NV12 => 1,
         };
         // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L128
         // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L129

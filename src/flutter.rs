@@ -70,6 +70,17 @@ lazy_static::lazy_static! {
     pub static ref TEXTURE_GPU_RENDERER_PLUGIN: Result<Library, LibError> = load_plugin_in_app_path("flutter_gpu_texture_renderer_plugin.dll");
 }
 
+#[cfg(all(target_os = "linux", feature = "hwcodec"))]
+lazy_static::lazy_static! {
+    pub static ref TEXTURE_GPU_RENDERER_PLUGIN: Result<Library, LibError> =
+        Library::open("libflutter_gpu_texture_renderer_plugin.so");
+}
+
+#[cfg(all(target_os = "linux", feature = "hwcodec"))]
+pub fn gpu_texture_render_available() -> bool {
+    crate::ui_interface::use_texture_render() && TEXTURE_GPU_RENDERER_PLUGIN.is_ok()
+}
+
 // Move this function into `src/platform/windows.rs` if there're more calls to load plugins.
 // Load dll with full path.
 #[cfg(target_os = "windows")]
@@ -226,7 +237,7 @@ struct SessionHandler {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum RenderType {
     PixelBuffer,
-    #[cfg(feature = "vram")]
+    #[cfg(any(feature = "vram", all(target_os = "linux", feature = "hwcodec")))]
     Texture,
 }
 
@@ -276,13 +287,26 @@ pub type FlutterGpuTextureRendererPluginCApiSetTexture =
 #[cfg(feature = "vram")]
 pub type FlutterGpuTextureRendererPluginCApiGetAdapterLuid = unsafe extern "C" fn() -> i64;
 
+// The linux gpu texture renderer takes NV12 planes; the plugin converts
+// in-shader. See scrap::nv12_stride for the buffer layout.
+#[cfg(all(target_os = "linux", feature = "hwcodec"))]
+pub type FlutterGpuTextureRendererPluginCApiSetNv12 = unsafe extern "C" fn(
+    output: *mut c_void,
+    y: *const u8,
+    uv: *const u8,
+    y_stride: c_int,
+    uv_stride: c_int,
+    width: c_int,
+    height: c_int,
+);
+
 pub(super) type TextureRgbaPtr = usize;
 
 struct DisplaySessionInfo {
     // TextureRgba pointer in flutter native.
     texture_rgba_ptr: TextureRgbaPtr,
     size: (usize, usize),
-    #[cfg(feature = "vram")]
+    #[cfg(any(feature = "vram", all(target_os = "linux", feature = "hwcodec")))]
     gpu_output_ptr: usize,
     notify_render_type: Option<RenderType>,
 }
@@ -296,6 +320,8 @@ struct VideoRenderer {
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
     #[cfg(feature = "vram")]
     on_texture_func: Option<Symbol<'static, FlutterGpuTextureRendererPluginCApiSetTexture>>,
+    #[cfg(all(target_os = "linux", feature = "hwcodec"))]
+    on_nv12_func: Option<Symbol<'static, FlutterGpuTextureRendererPluginCApiSetNv12>>,
 }
 
 impl Default for VideoRenderer {
@@ -340,6 +366,29 @@ impl Default for VideoRenderer {
                 None
             }
         };
+        #[cfg(all(target_os = "linux", feature = "hwcodec"))]
+        let on_nv12_func = match &*TEXTURE_GPU_RENDERER_PLUGIN {
+            Ok(lib) => {
+                let find_sym_res = unsafe {
+                    lib.symbol::<FlutterGpuTextureRendererPluginCApiSetNv12>(
+                        "FlutterGpuTextureRendererPluginCApiSetNv12",
+                    )
+                };
+                match find_sym_res {
+                    Ok(sym) => Some(sym),
+                    Err(e) => {
+                        log::error!(
+                            "Failed to find symbol FlutterGpuTextureRendererPluginCApiSetNv12, {e}"
+                        );
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("Failed to load texture gpu renderer plugin, {e}");
+                None
+            }
+        };
 
         Self {
             map_display_sessions: Default::default(),
@@ -348,6 +397,8 @@ impl Default for VideoRenderer {
             on_rgba_func,
             #[cfg(feature = "vram")]
             on_texture_func,
+            #[cfg(all(target_os = "linux", feature = "hwcodec"))]
+            on_nv12_func,
         }
     }
 }
@@ -365,7 +416,7 @@ impl VideoRenderer {
                 DisplaySessionInfo {
                     texture_rgba_ptr: usize::default(),
                     size: (width, height),
-                    #[cfg(feature = "vram")]
+                    #[cfg(any(feature = "vram", all(target_os = "linux", feature = "hwcodec")))]
                     gpu_output_ptr: usize::default(),
                     notify_render_type: None,
                 },
@@ -380,7 +431,7 @@ impl VideoRenderer {
                 if info.texture_rgba_ptr != usize::default() {
                     info.texture_rgba_ptr = usize::default();
                 }
-                #[cfg(feature = "vram")]
+                #[cfg(any(feature = "vram", all(target_os = "linux", feature = "hwcodec")))]
                 if info.gpu_output_ptr != usize::default() {
                     return;
                 }
@@ -406,7 +457,7 @@ impl VideoRenderer {
                         DisplaySessionInfo {
                             texture_rgba_ptr: ptr as _,
                             size: (0, 0),
-                            #[cfg(feature = "vram")]
+                            #[cfg(any(feature = "vram", all(target_os = "linux", feature = "hwcodec")))]
                             gpu_output_ptr: usize::default(),
                             notify_render_type: None,
                         },
@@ -416,7 +467,7 @@ impl VideoRenderer {
         }
     }
 
-    #[cfg(feature = "vram")]
+    #[cfg(any(feature = "vram", all(target_os = "linux", feature = "hwcodec")))]
     pub fn register_gpu_output(&self, display: usize, ptr: usize) {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if ptr == 0 {
@@ -521,6 +572,46 @@ impl VideoRenderer {
         }
         if let Some(func) = &self.on_texture_func {
             unsafe { func(info.gpu_output_ptr as _, texture) };
+        }
+        if info.notify_render_type != Some(RenderType::Texture) {
+            info.notify_render_type = Some(RenderType::Texture);
+            true
+        } else {
+            false
+        }
+    }
+
+    // The linux gpu texture renderer is fed NV12 planes (hardware decode
+    // output, no libyuv conversion); the plugin converts in-shader. The
+    // buffer layout is scrap::nv12_stride-documented. Mirrors on_texture.
+    #[cfg(all(target_os = "linux", feature = "hwcodec"))]
+    pub fn on_nv12(&self, display: usize, rgba: &scrap::ImageRgb) -> bool {
+        let mut write_lock = self.map_display_sessions.write().unwrap();
+        let opt_info = if !self.is_support_multi_ui_session {
+            write_lock.values_mut().next()
+        } else {
+            write_lock.get_mut(&display)
+        };
+        let Some(info) = opt_info else {
+            return false;
+        };
+        if info.gpu_output_ptr == usize::default() {
+            return false;
+        }
+        if let Some(func) = &self.on_nv12_func {
+            let stride = scrap::nv12_stride(rgba.w + (rgba.w & 1), rgba.align());
+            let y_size = stride * rgba.h;
+            unsafe {
+                func(
+                    info.gpu_output_ptr as _,
+                    rgba.raw.as_ptr(),
+                    rgba.raw.as_ptr().add(y_size),
+                    stride as _,
+                    stride as _,
+                    rgba.w as _,
+                    rgba.h as _,
+                );
+            }
         }
         if info.notify_render_type != Some(RenderType::Texture) {
             info.notify_render_type = Some(RenderType::Texture);
@@ -850,6 +941,18 @@ impl InvokeUiSession for FlutterHandler {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb) {
         let use_texture_render = self.use_texture_render.load(Ordering::Relaxed);
+        #[cfg(all(target_os = "linux", feature = "hwcodec"))]
+        if rgba.fmt() == scrap::ImageFormat::NV12 {
+            // NV12 only flows to the gpu texture renderer; the pixelbuffer
+            // and soft renderers only understand rgba. Can happen when the
+            // texture-render option is toggled off mid-session (the decoder
+            // keeps the format it was created with, like the windows vram
+            // path) — drop until the session restarts.
+            if use_texture_render {
+                self.on_nv12(display, rgba);
+            }
+            return;
+        }
         self.on_rgba_flutter_texture_render(use_texture_render, display, rgba);
         if !use_texture_render {
             self.on_rgba_soft_render(display, rgba);
@@ -870,6 +973,18 @@ impl InvokeUiSession for FlutterHandler {
         }
         for (_, session) in self.session_handlers.read().unwrap().iter() {
             if session.renderer.on_texture(display, texture) {
+                if let Some(stream) = &session.event_stream {
+                    stream.add(EventToUI::Texture(display, true));
+                }
+            }
+        }
+    }
+
+    #[inline]
+    #[cfg(all(target_os = "linux", feature = "hwcodec"))]
+    fn on_nv12(&self, display: usize, rgba: &scrap::ImageRgb) {
+        for (_, session) in self.session_handlers.read().unwrap().iter() {
+            if session.renderer.on_nv12(display, rgba) {
                 if let Some(stream) = &session.event_stream {
                     stream.add(EventToUI::Texture(display, true));
                 }
