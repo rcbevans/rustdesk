@@ -1,4 +1,4 @@
-use crate::{quartz, Frame, Pixfmt};
+use crate::{AdapterDevice, quartz, Frame, Pixfmt};
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex, TryLockError};
 use std::{io, mem};
@@ -72,6 +72,14 @@ impl crate::TraitCapturer for Capturer {
             Err(TryLockError::Poisoned(..)) => Err(io::ErrorKind::Other.into()),
         }
     }
+
+    #[cfg(feature = "vram")]
+    fn device(&self) -> AdapterDevice {
+        AdapterDevice::default()
+    }
+
+    #[cfg(feature = "vram")]
+    fn set_output_texture(&mut self, _texture: bool) {}
 }
 
 pub struct PixelBuffer<'a> {

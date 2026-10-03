@@ -74,6 +74,11 @@ lazy_static::lazy_static! {
 lazy_static::lazy_static! {
     pub static ref TEXTURE_GPU_RENDERER_PLUGIN: Result<Library, LibError> = load_plugin_in_app_path("flutter_gpu_texture_renderer_plugin.dll");
 }
+#[cfg(all(feature = "vram", target_os = "macos"))]
+lazy_static::lazy_static! {
+    // The macOS implementation is statically linked into the process.
+    pub static ref TEXTURE_GPU_RENDERER_PLUGIN: Result<Library, LibError> = Library::open_self();
+}
 
 // Move this function into `src/platform/windows.rs` if there're more calls to load plugins.
 // Load dll with full path.
@@ -1805,7 +1810,14 @@ pub fn get_adapter_luid() -> Option<i64> {
     None
 }
 
-#[cfg(feature = "vram")]
+#[cfg(all(feature = "vram", target_os = "macos"))]
+pub fn get_adapter_luid() -> Option<i64> {
+    // macOS has no adapter enumeration; the VideoToolbox IOSurface is
+    // process-global.
+    None
+}
+
+#[cfg(all(feature = "vram", not(target_os = "macos")))]
 pub fn get_adapter_luid() -> Option<i64> {
     if !crate::ui_interface::use_texture_render() {
         return None;

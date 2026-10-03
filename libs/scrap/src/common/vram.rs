@@ -250,25 +250,33 @@ impl VRamEncoder {
             // has fallback, no need to require all adapters support
             v
         } else {
-            let Ok(displays) = crate::Display::all() else {
-                log::error!("failed to get displays");
-                return vec![];
-            };
-            if displays.is_empty() {
-                log::error!("no display found");
-                return vec![];
-            }
-            let luids = displays
-                .iter()
-                .map(|d| d.adapter_luid())
-                .collect::<Vec<_>>();
-            if luids
-                .iter()
-                .all(|luid| v.iter().any(|f| Some(f.luid) == *luid))
+            #[cfg(windows)]
             {
-                v
-            } else {
-                log::info!("not all adapters support {data_format:?}, luids = {luids:?}");
+                let Ok(displays) = crate::Display::all() else {
+                    log::error!("failed to get displays");
+                    return vec![];
+                };
+                if displays.is_empty() {
+                    log::error!("no display found");
+                    return vec![];
+                }
+                let luids = displays
+                    .iter()
+                    .map(|d| d.adapter_luid())
+                    .collect::<Vec<_>>();
+                if luids
+                    .iter()
+                    .all(|luid| v.iter().any(|f| Some(f.luid) == *luid))
+                {
+                    v
+                } else {
+                    log::info!("not all adapters support {data_format:?}, luids = {luids:?}");
+                    vec![]
+                }
+            }
+            // VRAM encode is not implemented outside windows.
+            #[cfg(not(windows))]
+            {
                 vec![]
             }
         }
@@ -340,7 +348,16 @@ impl VRamDecoder {
         crate::hwcodec::HwCodecConfig::get()
             .vram_decode
             .drain(..)
-            .filter(|c| c.data_format == data_format && c.luid == luid && luid != 0)
+            .filter(|c| {
+                c.data_format == data_format
+                    // macOS exposes a single VideoToolbox device; the d3d11
+                    // adapter luid scheme does not apply.
+                    && if cfg!(target_os = "macos") {
+                        true
+                    } else {
+                        c.luid == luid && luid != 0
+                    }
+            })
             .collect()
     }
 
