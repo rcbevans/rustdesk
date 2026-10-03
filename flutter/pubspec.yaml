@@ -98,8 +98,8 @@ dependencies:
   dropdown_button2: ^2.0.0
   flutter_gpu_texture_renderer:
     git:
-      url: https://github.com/rustdesk-org/flutter_gpu_texture_renderer
-      ref: 08a471bb8ceccdd50483c81cdfa8b81b07b14b87
+      url: https://github.com/rcbevans/flutter_gpu_texture_renderer
+      ref: bdaec20fb3af8b372eac5009d514cb4fc189e8ec
   uuid: ^3.0.7
   auto_size_text_field: ^2.2.1
   flex_color_picker: ^3.3.0

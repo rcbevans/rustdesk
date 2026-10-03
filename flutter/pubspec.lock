@@ -539,9 +539,9 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "08a471bb8ceccdd50483c81cdfa8b81b07b14b87"
-      resolved-ref: "08a471bb8ceccdd50483c81cdfa8b81b07b14b87"
-      url: "https://github.com/rustdesk-org/flutter_gpu_texture_renderer"
+      ref: bdaec20fb3af8b372eac5009d514cb4fc189e8ec
+      resolved-ref: bdaec20fb3af8b372eac5009d514cb4fc189e8ec
+      url: "https://github.com/rcbevans/flutter_gpu_texture_renderer"
     source: git
     version: "0.0.1"
   flutter_keyboard_visibility:
