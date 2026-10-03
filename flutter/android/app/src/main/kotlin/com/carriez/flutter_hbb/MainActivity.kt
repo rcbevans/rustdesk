@@ -91,6 +91,7 @@ class MainActivity : FlutterActivity() {
             channelTag
         )
         initFlutterChannel(flutterMethodChannel!!)
+        HwDecodeSurface.register(flutterEngine)
         thread {
             try {
                 setCodecInfo()

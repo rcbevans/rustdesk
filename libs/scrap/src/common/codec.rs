@@ -9,6 +9,8 @@ use std::{
 use crate::hwcodec::*;
 #[cfg(feature = "mediacodec")]
 use crate::mediacodec::{MediaCodecDecoder, H264_DECODER_SUPPORT, H265_DECODER_SUPPORT};
+#[cfg(all(target_os = "android", feature = "mediacodec"))]
+use crate::mediacodec::MediaCodecSurfaceDecoder;
 #[cfg(feature = "vram")]
 use crate::vram::*;
 use crate::{
@@ -120,6 +122,14 @@ pub struct Decoder {
     vp9_media_codec: Option<MediaCodecDecoder>,
     #[cfg(feature = "mediacodec")]
     av1_media_codec: Option<MediaCodecDecoder>,
+    #[cfg(all(target_os = "android", feature = "mediacodec"))]
+    h264_surface_decoder: Option<MediaCodecSurfaceDecoder>,
+    #[cfg(all(target_os = "android", feature = "mediacodec"))]
+    h265_surface_decoder: Option<MediaCodecSurfaceDecoder>,
+    #[cfg(all(target_os = "android", feature = "mediacodec"))]
+    vp9_surface_decoder: Option<MediaCodecSurfaceDecoder>,
+    #[cfg(all(target_os = "android", feature = "mediacodec"))]
+    av1_surface_decoder: Option<MediaCodecSurfaceDecoder>,
     format: CodecFormat,
     valid: bool,
     #[cfg(feature = "hwcodec")]
@@ -649,6 +659,14 @@ impl Decoder {
             vp9_media_codec,
             #[cfg(feature = "mediacodec")]
             av1_media_codec,
+            #[cfg(all(target_os = "android", feature = "mediacodec"))]
+            h264_surface_decoder: None,
+            #[cfg(all(target_os = "android", feature = "mediacodec"))]
+            h265_surface_decoder: None,
+            #[cfg(all(target_os = "android", feature = "mediacodec"))]
+            vp9_surface_decoder: None,
+            #[cfg(all(target_os = "android", feature = "mediacodec"))]
+            av1_surface_decoder: None,
             format,
             valid,
             #[cfg(feature = "hwcodec")]
@@ -669,14 +687,74 @@ impl Decoder {
     pub fn warm_up_grace(&self) -> bool {
         #[cfg(feature = "mediacodec")]
         {
-            self.h264_media_codec.is_some()
+            let mut grace = self.h264_media_codec.is_some()
                 || self.h265_media_codec.is_some()
                 || self.vp9_media_codec.is_some()
-                || self.av1_media_codec.is_some()
+                || self.av1_media_codec.is_some();
+            #[cfg(all(target_os = "android", feature = "mediacodec"))]
+            {
+                grace = grace
+                    || self.h264_surface_decoder.is_some()
+                    || self.h265_surface_decoder.is_some()
+                    || self.vp9_surface_decoder.is_some()
+                    || self.av1_surface_decoder.is_some();
+            }
+            grace
         }
         #[cfg(not(feature = "mediacodec"))]
         {
             false
+        }
+    }
+
+    // Create the surface decoder for the current format if a SurfaceTexture
+    // was registered for this display; called from VideoHandler::new/reset.
+    // The buffer-mode decoder created in new() stays as the fallback. The
+    // registry is display-keyed: the android app runs a single remote session.
+    #[cfg(all(target_os = "android", feature = "mediacodec"))]
+    pub fn init_surface_decoder(&mut self, format: CodecFormat, display: usize, size: (usize, usize)) {
+        if !enable_hwcodec_option() {
+            return;
+        }
+        let Some((window, texture_id)) = crate::android::get_hw_decode_surface(display as _) else {
+            log::info!("init_surface_decoder: no registered surface for display {display}");
+            return;
+        };
+        log::info!(
+            "init_surface_decoder: display {display}, size {}x{}, texture_id {texture_id}",
+            size.0,
+            size.1
+        );
+        let decoder = match format {
+            CodecFormat::H264 => &mut self.h264_surface_decoder,
+            CodecFormat::H265 => &mut self.h265_surface_decoder,
+            CodecFormat::VP9 => &mut self.vp9_surface_decoder,
+            CodecFormat::AV1 => &mut self.av1_surface_decoder,
+            _ => return,
+        };
+        let created = MediaCodecSurfaceDecoder::new(
+            format,
+            size.0 as _,
+            size.1 as _,
+            &window,
+            texture_id,
+        );
+        let surface_ok = created.is_some();
+        *decoder = created;
+        if surface_ok {
+            // The surface decoder owns the format now; an idle buffer
+            // decoder would hold a second c2 instance and is never fed.
+            // Without it a surface failure escalates via the fail counter
+            // to a codec switch (bounded); the only difference vs keeping
+            // the buffer decoder is inside the warm-up window, where a
+            // recovery at the next keyframe is no longer attempted.
+            match format {
+                CodecFormat::H264 => self.h264_media_codec = None,
+                CodecFormat::H265 => self.h265_media_codec = None,
+                CodecFormat::VP9 => self.vp9_media_codec = None,
+                CodecFormat::AV1 => self.av1_media_codec = None,
+                _ => {}
+            }
         }
     }
 
@@ -698,6 +776,21 @@ impl Decoder {
                 }
             }
             video_frame::Union::Vp9s(vp9s) => {
+                #[cfg(all(target_os = "android", feature = "mediacodec"))]
+                if let Some(decoder) = &mut self.vp9_surface_decoder {
+                    match Decoder::handle_surface_video_frame(decoder, vp9s, _texture) {
+                        Ok(has_output) => {
+                            *_pixelbuffer = false;
+                            return Ok(has_output);
+                        }
+                        Err(e) => {
+                            // Drop the decoder so the next frame falls back
+                            // to the buffer-mode decoder below.
+                            log::error!("vp9 surface decode failed: {e}");
+                            self.vp9_surface_decoder = None;
+                        }
+                    }
+                }
                 #[cfg(feature = "mediacodec")]
                 if let Some(decoder) = &mut self.vp9_media_codec {
                     *chroma = Some(Chroma::I420);
@@ -710,6 +803,19 @@ impl Decoder {
                 }
             }
             video_frame::Union::Av1s(av1s) => {
+                #[cfg(all(target_os = "android", feature = "mediacodec"))]
+                if let Some(decoder) = &mut self.av1_surface_decoder {
+                    match Decoder::handle_surface_video_frame(decoder, av1s, _texture) {
+                        Ok(has_output) => {
+                            *_pixelbuffer = false;
+                            return Ok(has_output);
+                        }
+                        Err(e) => {
+                            log::error!("av1 surface decode failed: {e}");
+                            self.av1_surface_decoder = None;
+                        }
+                    }
+                }
                 #[cfg(feature = "mediacodec")]
                 if let Some(decoder) = &mut self.av1_media_codec {
                     *chroma = Some(Chroma::I420);
@@ -724,6 +830,21 @@ impl Decoder {
             #[cfg(any(feature = "hwcodec", feature = "vram", feature = "mediacodec"))]
             video_frame::Union::H264s(h264s) => {
                 *chroma = Some(Chroma::I420);
+                #[cfg(all(target_os = "android", feature = "mediacodec"))]
+                if let Some(decoder) = &mut self.h264_surface_decoder {
+                    match Decoder::handle_surface_video_frame(decoder, h264s, _texture) {
+                        Ok(has_output) => {
+                            *_pixelbuffer = false;
+                            return Ok(has_output);
+                        }
+                        Err(e) => {
+                            // Drop the decoder so the next frame falls back
+                            // to the buffer-mode decoder below.
+                            log::error!("h264 surface decode failed: {e}");
+                            self.h264_surface_decoder = None;
+                        }
+                    }
+                }
                 #[cfg(feature = "mediacodec")]
                 if let Some(decoder) = &mut self.h264_media_codec {
                     return Decoder::handle_mediacodec_video_frame(decoder, h264s, rgb);
@@ -742,6 +863,21 @@ impl Decoder {
             #[cfg(any(feature = "hwcodec", feature = "vram", feature = "mediacodec"))]
             video_frame::Union::H265s(h265s) => {
                 *chroma = Some(Chroma::I420);
+                #[cfg(all(target_os = "android", feature = "mediacodec"))]
+                if let Some(decoder) = &mut self.h265_surface_decoder {
+                    match Decoder::handle_surface_video_frame(decoder, h265s, _texture) {
+                        Ok(has_output) => {
+                            *_pixelbuffer = false;
+                            return Ok(has_output);
+                        }
+                        Err(e) => {
+                            // Drop the decoder so the next frame falls back
+                            // to the buffer-mode decoder below.
+                            log::error!("h265 surface decode failed: {e}");
+                            self.h265_surface_decoder = None;
+                        }
+                    }
+                }
                 #[cfg(feature = "mediacodec")]
                 if let Some(decoder) = &mut self.h265_media_codec {
                     return Decoder::handle_mediacodec_video_frame(decoder, h265s, rgb);
@@ -867,6 +1003,26 @@ impl Decoder {
         let mut has_output = false;
         for frame in frames.frames.iter() {
             has_output |= decoder.decode(&frame.data, rgb)?;
+        }
+        Ok(has_output)
+    }
+
+    // The texture value is the flutter texture id of the registered
+    // SurfaceTexture; the client's texture notify passes it through.
+    #[cfg(all(target_os = "android", feature = "mediacodec"))]
+    fn handle_surface_video_frame(
+        decoder: &mut MediaCodecSurfaceDecoder,
+        frames: &EncodedVideoFrames,
+        texture: &mut ImageTexture,
+    ) -> ResultType<bool> {
+        // A batch may carry several frames; queue all of them or their
+        // reference chains break.
+        let mut has_output = false;
+        for frame in frames.frames.iter() {
+            has_output |= decoder.decode(&frame.data)?;
+        }
+        if has_output {
+            *texture = decoder.texture();
         }
         Ok(has_output)
     }

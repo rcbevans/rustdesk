@@ -1,7 +1,7 @@
 use jni::objects::JByteBuffer;
 use jni::objects::JString;
 use jni::objects::JValue;
-use jni::sys::jboolean;
+use jni::sys::{jboolean, jint, jlong};
 use jni::JNIEnv;
 use jni::{
     objects::{GlobalRef, JClass, JObject},
@@ -14,11 +14,15 @@ use hbb_common::protobuf::Message;
 use jni::errors::{Error as JniError, Result as JniResult};
 use lazy_static::lazy_static;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::ops::Not;
 use std::os::raw::c_void;
 use std::sync::atomic::{AtomicPtr, Ordering::SeqCst};
 use std::sync::{Mutex, RwLock};
 use std::time::{Duration, Instant};
+
+#[cfg(feature = "mediacodec")]
+use ndk::native_window::NativeWindow;
 
 lazy_static! {
     static ref JVM: RwLock<Option<JavaVM>> = RwLock::new(None);
@@ -31,6 +35,17 @@ lazy_static! {
     static ref CLIPBOARD_MANAGER: RwLock<Option<GlobalRef>> = RwLock::new(None);
     static ref CLIPBOARDS_HOST: Mutex<Option<MultiClipboards>> = Mutex::new(None);
     static ref CLIPBOARDS_CLIENT: Mutex<Option<MultiClipboards>> = Mutex::new(None);
+    // Keyed by display only: the android app runs a single remote session.
+    #[cfg(feature = "mediacodec")]
+    static ref HW_DECODE_SURFACES: RwLock<HashMap<i32, HwDecodeSurfaceEntry>> = RwLock::new(HashMap::new());
+}
+
+#[cfg(feature = "mediacodec")]
+struct HwDecodeSurfaceEntry {
+    // A clone is handed to the decoder, which must outlive the registry
+    // entry: AMediaCodec_configure does not take its own reference.
+    window: NativeWindow,
+    texture_id: i64,
 }
 
 const MAX_VIDEO_FRAME_TIMEOUT: Duration = Duration::from_millis(100);
@@ -224,6 +239,70 @@ pub extern "system" fn Java_ffi_FFI_setClipboardManager(
         if let Ok(manager) = env.new_global_ref(clipboard_manager) {
             *CLIPBOARD_MANAGER.write().unwrap() = Some(manager);
         }
+    }
+}
+
+#[cfg(feature = "mediacodec")]
+#[no_mangle]
+pub extern "system" fn Java_ffi_FFI_setHwDecodeSurface(
+    mut env: JNIEnv,
+    _class: JClass,
+    session_id: JString,
+    display: jint,
+    surface: JObject,
+    texture_id: jlong,
+) {
+    let session_id = if let Ok(session_id) = env.get_string(&session_id) {
+        session_id.to_string_lossy().to_string()
+    } else {
+        Default::default()
+    };
+    // NativeWindow owns an ANativeWindow reference (Drop releases it); it is
+    // Send + Sync, so the decode thread can clone it later.
+    let window =
+        unsafe { NativeWindow::from_surface(env.get_native_interface(), surface.as_raw()) };
+    match window {
+        Some(window) => {
+            log::info!(
+                "hw decode surface registered: session {session_id}, display {display}, texture {texture_id}"
+            );
+            HW_DECODE_SURFACES.write().unwrap().insert(
+                display,
+                HwDecodeSurfaceEntry {
+                    window,
+                    texture_id,
+                },
+            );
+        }
+        None => {
+            log::error!("failed to convert surface to native window, display {display}");
+        }
+    }
+}
+
+#[cfg(feature = "mediacodec")]
+#[no_mangle]
+pub extern "system" fn Java_ffi_FFI_removeHwDecodeSurface(
+    _env: JNIEnv,
+    _class: JClass,
+    _session_id: JString,
+    display: jint,
+) {
+    remove_hw_decode_surface(display);
+}
+
+#[cfg(feature = "mediacodec")]
+pub fn get_hw_decode_surface(display: i32) -> Option<(NativeWindow, i64)> {
+    let surfaces = HW_DECODE_SURFACES.read().unwrap();
+    surfaces
+        .get(&display)
+        .map(|e| (e.window.clone(), e.texture_id))
+}
+
+#[cfg(feature = "mediacodec")]
+pub fn remove_hw_decode_surface(display: i32) {
+    if HW_DECODE_SURFACES.write().unwrap().remove(&display).is_some() {
+        log::info!("hw decode surface removed, display {display}");
     }
 }
 
