@@ -2728,7 +2728,7 @@ class CanvasModel with ChangeNotifier {
 
   // mobile only
   updateScale(double v, Offset focalPoint) {
-    if (parent.target?.imageModel.image == null) return;
+    if (!(parent.target?.isVideoLive ?? false)) return;
     final s = _scale;
     _scale *= v;
     final maxs = parent.target?.imageModel.maxScale ?? 1;
@@ -3359,7 +3359,7 @@ class CursorModel with ChangeNotifier {
     }
     double dx = delta.dx;
     double dy = delta.dy;
-    if (parent.target?.imageModel.image == null) return;
+    if (!(parent.target?.isVideoLive ?? false)) return;
     final scale = parent.target?.canvasModel.scale ?? 1.0;
     dx /= scale;
     dy /= scale;
@@ -4051,6 +4051,17 @@ class FFI {
   late final Peers recentPeersModel; // global
   late final Peers favoritePeersModel; // global
   late final Peers lanPeersModel; // global
+
+  /// The session's video is live: the pixel path sets image on the first
+  /// rgba frame; the android zero-copy surface path never does (frames go
+  /// to the texture) — once either texture is registered the guards that
+  /// used to check the image only would wrongly treat a healthy
+  /// surface-mode session as video-less and kill mouse-mode panning.
+  bool get isVideoLive {
+    if (imageModel.image != null) return true;
+    return textureModel.getTextureId(ffiModel.pi.currentDisplay).value >= 0;
+  }
+
 
   // Terminal model registry for multiple terminals
   final Map<int, TerminalModel> _terminalModels = {};
