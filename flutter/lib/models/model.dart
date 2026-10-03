@@ -723,6 +723,8 @@ class FfiModel with ChangeNotifier {
 
   _handleUseTextureRender(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
+    debugPrint(
+        "use_texture_render event: v=${evt['v']} session=$sessionId peer=$peerId");
     final enabled = evt['v'] == 'Y';
     parent.target?.imageModel.setUseTextureRender(enabled);
     // The option flips Rust's render path live; iOS must create or drop this

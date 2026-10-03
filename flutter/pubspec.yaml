@@ -99,7 +99,7 @@ dependencies:
   flutter_gpu_texture_renderer:
     git:
       url: https://github.com/rcbevans/flutter_gpu_texture_renderer
-      ref: bdaec20fb3af8b372eac5009d514cb4fc189e8ec
+      ref: 7eb403f30ef61d775ec04e712e97a1752105244a
   uuid: ^3.0.7
   auto_size_text_field: ^2.2.1
   flex_color_picker: ^3.3.0
