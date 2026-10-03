@@ -75,8 +75,11 @@ set(OPTIONS "\
 --disable-postproc \
 --enable-decoder=h264 \
 --enable-decoder=hevc \
+--enable-decoder=vp9 \
+--enable-decoder=av1 \
 --enable-parser=h264 \
 --enable-parser=hevc \
+--enable-parser=vp9 \
 --enable-bsf=h264_mp4toannexb \
 --enable-bsf=hevc_mp4toannexb  \
 --enable-bsf=h264_metadata \
@@ -115,8 +118,13 @@ if(VCPKG_TARGET_IS_LINUX)
 --enable-encoder=hevc_amf \
 --enable-hwaccel=h264_vaapi \
 --enable-hwaccel=hevc_vaapi \
+--enable-hwaccel=vp9_vaapi \
+--enable-hwaccel=av1_vaapi \
+--enable-hwaccel=vp9_nvdec \
+--enable-hwaccel=av1_nvdec \
 --enable-encoder=h264_vaapi \
 --enable-encoder=hevc_vaapi \
+--enable-encoder=av1_vaapi \
 ")
 
         if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
@@ -134,8 +142,12 @@ elseif(VCPKG_TARGET_IS_WINDOWS)
 --enable-d3d11va \
 --enable-hwaccel=h264_d3d11va \
 --enable-hwaccel=hevc_d3d11va \
+--enable-hwaccel=vp9_d3d11va \
+--enable-hwaccel=av1_d3d11va \
 --enable-hwaccel=h264_d3d11va2 \
 --enable-hwaccel=hevc_d3d11va2 \
+--enable-hwaccel=vp9_d3d11va2 \
+--enable-hwaccel=av1_d3d11va2 \
 ")
 
     if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86" OR VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
@@ -144,14 +156,19 @@ elseif(VCPKG_TARGET_IS_WINDOWS)
 --enable-ffnvcodec \
 --enable-hwaccel=h264_nvdec \
 --enable-hwaccel=hevc_nvdec \
+--enable-hwaccel=vp9_nvdec \
+--enable-hwaccel=av1_nvdec \
 --enable-amf \
 --enable-encoder=h264_amf \
 --enable-encoder=hevc_amf \
+--enable-encoder=av1_amf \
 --enable-encoder=h264_nvenc \
 --enable-encoder=hevc_nvenc \
+--enable-encoder=av1_nvenc \
 --enable-libmfx \
 --enable-encoder=h264_qsv \
 --enable-encoder=hevc_qsv \
+--enable-encoder=av1_qsv \
 ")
     endif()
 
