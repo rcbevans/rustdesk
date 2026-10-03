@@ -1125,7 +1125,7 @@ pub fn enable_vram_option(encode: bool) -> bool {
     {
         use base::config::keys::OPTION_USE_VRAM_RENDER;
         // Machine-local hardware capability, like the texture-render health.
-        !encode && LocalConfig::get_option(OPTION_USE_VRAM_RENDER) == "Y"
+        !encode && hbb_common::config::LocalConfig::get_option(OPTION_USE_VRAM_RENDER) == "Y"
     }
     #[cfg(not(any(windows, target_os = "macos")))]
     {
