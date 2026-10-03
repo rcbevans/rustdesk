@@ -2471,7 +2471,9 @@ pub fn main_has_file_clipboard() -> SyncReturn<bool> {
 }
 
 pub fn main_has_gpu_texture_render() -> SyncReturn<bool> {
-    SyncReturn(cfg!(feature = "vram"))
+    // Android decodes to a SurfaceTexture registered by the flutter engine,
+    // so its texture notify uses the same gpuTexture=true event.
+    SyncReturn(cfg!(any(feature = "vram", target_os = "android")))
 }
 
 pub fn cm_init() {

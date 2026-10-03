@@ -863,16 +863,41 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     #[inline]
-    #[cfg(feature = "vram")]
-    fn on_texture(&self, display: usize, texture: *mut c_void) {
-        if !self.use_texture_render.load(Ordering::Relaxed) {
-            return;
-        }
-        for (_, session) in self.session_handlers.read().unwrap().iter() {
-            if session.renderer.on_texture(display, texture) {
+    #[cfg(any(feature = "vram", target_os = "android"))]
+    fn on_texture(&self, display: usize, _texture: *mut c_void) {
+        #[cfg(target_os = "android")]
+        {
+            // MediaCodec renders into the registered SurfaceTexture itself;
+            // only the switch to texture render needs notifying.
+            for (_, session) in self.session_handlers.read().unwrap().iter() {
                 if let Some(stream) = &session.event_stream {
                     stream.add(EventToUI::Texture(display, true));
                 }
+            }
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            if !self.use_texture_render.load(Ordering::Relaxed) {
+                return;
+            }
+            for (_, session) in self.session_handlers.read().unwrap().iter() {
+                if session.renderer.on_texture(display, _texture) {
+                    if let Some(stream) = &session.event_stream {
+                        stream.add(EventToUI::Texture(display, true));
+                    }
+                }
+            }
+        }
+    }
+
+    #[inline]
+    #[cfg(all(target_os = "android", feature = "flutter"))]
+    fn on_texture_disabled(&self, display: usize) {
+        // The surface path stopped producing frames (fallback to the pixel
+        // path); dart must drop the texture id and repaint from rgba.
+        for (_, session) in self.session_handlers.read().unwrap().iter() {
+            if let Some(stream) = &session.event_stream {
+                stream.add(EventToUI::Texture(display, false));
             }
         }
     }

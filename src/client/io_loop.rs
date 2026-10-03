@@ -2667,6 +2667,13 @@ impl<T: InvokeUiSession> Remote<T> {
             discard_queue: discard_queue.clone(),
         };
         let handler = self.handler.ui_handler.clone();
+        // Android: dart learns the paint mode via transitions - a surface
+        // frame => Texture event, a pixel frame after surface frames =>
+        // disabled event. Tracked per callback so a fallback (surface
+        // decoder dropped) and a later re-creation (reset/codec switch)
+        // both flip dart's paint mode and the picture never freezes.
+        #[cfg(all(target_os = "android", feature = "flutter"))]
+        let mut last_pixelbuffer = true;
         crate::client::start_video_thread(
             self.handler.clone(),
             display,
@@ -2681,10 +2688,20 @@ impl<T: InvokeUiSession> Remote<T> {
                   pixelbuffer: bool| {
                 *frame_count.write().unwrap() += 1;
                 if pixelbuffer {
+                    #[cfg(all(target_os = "android", feature = "flutter"))]
+                    if !last_pixelbuffer {
+                        last_pixelbuffer = true;
+                        handler.on_texture_disabled(display);
+                    }
                     handler.on_rgba(display, data);
                 } else {
                     #[cfg(all(feature = "vram", feature = "flutter"))]
                     handler.on_texture(display, _texture);
+                    #[cfg(all(target_os = "android", feature = "flutter"))]
+                    if last_pixelbuffer {
+                        last_pixelbuffer = false;
+                        handler.on_texture(display, _texture);
+                    }
                 }
             },
         );
