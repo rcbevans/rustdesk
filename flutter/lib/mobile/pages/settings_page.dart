@@ -932,7 +932,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               },
             ),
         ]),
-        if (isAndroid)
+        if (isAndroid || isIOS)
           SettingsSection(title: Text(translate('Hardware Codec')), tiles: [
             SettingsTile.switchTile(
               title: Text(translate('Enable hardware codec')),
