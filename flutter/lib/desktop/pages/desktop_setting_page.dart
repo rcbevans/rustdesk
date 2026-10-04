@@ -582,6 +582,19 @@ class _GeneralState extends State<_General> {
                   await bind.mainSetLocalOption(key: k, value: v ? 'Y' : 'N'),
             ),
           ),
+        if (isMacOS && !isWeb)
+          Tooltip(
+            message: translate('vram_render_tip'),
+            child: _OptionCheckBox(
+              context,
+              "Use zero-copy rendering",
+              kOptionUseVramRender,
+              optGetter: () =>
+                  bind.mainGetLocalOption(key: kOptionUseVramRender) == 'Y',
+              optSetter: (k, v) async =>
+                  await bind.mainSetLocalOption(key: k, value: v ? 'Y' : 'N'),
+            ),
+          ),
         if (isWindows)
           Tooltip(
             message: translate('d3d_render_tip'),
