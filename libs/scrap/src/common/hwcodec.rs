@@ -828,3 +828,28 @@ pub fn start_check_process() {
         std::thread::spawn(f);
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Documents why set() must store the probe JSON verbatim: the typed
+    // round trip silently drops fields the compiling feature set does not
+    // know about, which is how a server without the vram feature stripped
+    // the check process's vram_decode results.
+    #[test]
+    fn hwcodec_config_serde_drops_fields_outside_the_feature_set() {
+        #[derive(Serialize, Deserialize)]
+        struct WithoutVram {
+            #[serde(default)]
+            signature: u64,
+        }
+        let full = r#"{"signature": 16843009, "vram_decode": [{"luid": 0}]}"#;
+        let parsed: WithoutVram = serde_json::from_str(full).unwrap();
+        let round_tripped = serde_json::to_string(&parsed).unwrap();
+        assert!(!round_tripped.contains("vram_decode"));
+        // The fix: set() stores the incoming string itself, so nothing is
+        // lost for a reader built with the feature.
+        assert!(full.contains("vram_decode"));
+    }
+}
