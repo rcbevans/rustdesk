@@ -18,6 +18,7 @@ import wakelock_plus
 import window_manager
 import window_size
 import texture_rgba_renderer
+import flutter_gpu_texture_renderer
 
 // Global state for relative mouse mode
 // All properties and methods must be accessed on the main thread since they
@@ -85,6 +86,7 @@ class MainFlutterWindow: NSWindow {
             WakelockPlusMacosPlugin.register(with: controller.registrar(forPlugin: "WakelockPlusMacosPlugin"))
             WindowSizePlugin.register(with: controller.registrar(forPlugin: "WindowSizePlugin"))
             TextureRgbaRendererPlugin.register(with: controller.registrar(forPlugin: "TextureRgbaRendererPlugin"))
+            FlutterGpuTextureRendererPlugin.register(with: controller.registrar(forPlugin: "FlutterGpuTextureRendererPlugin"))
         }
 
         super.awakeFromNib()

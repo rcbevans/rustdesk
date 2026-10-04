@@ -2251,9 +2251,6 @@ pub async fn hwcodec_process() {
     let s = scrap::hwcodec::check_available_hwcodec();
     let mut sent = false;
     for _ in 0..5 {
-        if sent {
-            break;
-        }
         match crate::ipc::connect(1000, "").await {
             Ok(mut conn) => {
                 match conn

@@ -46,11 +46,12 @@ class _PixelbufferTexture {
   destroy(bool unregisterTexture, FFI ffi) async {
     if (!_destroying && _textureKey != -1 && _sessionId != null) {
       _destroying = true;
-      if (unregisterTexture) {
-        platformFFI.registerPixelbufferTexture(_sessionId!, display, 0);
-        // sleep for a while to avoid the texture is used after it's unregistered.
-        await Future.delayed(Duration(milliseconds: 100));
-      }
+      // Rust must drop the texture pointer in every case: unregisterTexture =
+      // false (move to a new window) leaves the session decoding, and a
+      // frame written to the closed texture after this call is undefined.
+      platformFFI.registerPixelbufferTexture(_sessionId!, display, 0);
+      // sleep for a while to avoid the texture is used after it's unregistered.
+      await Future.delayed(Duration(milliseconds: 100));
       await textureRenderer.closeTexture(_textureKey);
       _textureKey = -1;
       _destroying = false;
@@ -106,11 +107,13 @@ class _GpuTexture {
     // must stop texture render, render unregistered texture cause crash
     if (!_destroying && support && _sessionId != null && _textureId != -1) {
       _destroying = true;
-      if (unregisterTexture) {
-        platformFFI.registerGpuTexture(_sessionId!, _display, 0);
-        // sleep for a while to avoid the texture is used after it's unregistered.
-        await Future.delayed(Duration(milliseconds: 100));
-      }
+      // Rust must drop the output pointer in every case: unregisterTexture =
+      // false (move to a new window) leaves the session decoding, and a
+      // frame written to the freed output after the plugin deallocs it is a
+      // use-after-free.
+      platformFFI.registerGpuTexture(_sessionId!, _display, 0);
+      // sleep for a while to avoid the texture is used after it's unregistered.
+      await Future.delayed(Duration(milliseconds: 100));
       await gpuTextureRenderer.unregisterTexture(_textureId);
       _textureId = -1;
       _destroying = false;

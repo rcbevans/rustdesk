@@ -2539,12 +2539,12 @@ pub fn cm_init() {
     crate::flutter::connection_manager::cm_init();
     // The viewer process needs the hardware decoder enumeration even when no
     // local server runs; the cache-valid guard inside keeps this a no-op when
-    // the server already probed.
-    #[cfg(all(
-        feature = "hwcodec",
-        not(any(target_os = "android", target_os = "ios"))
-    ))]
-    scrap::hwcodec::start_check_process();
+    // the server already probed. macOS: gated on the vram option so the
+    // option-off process is exactly the pre-vram flow.
+    #[cfg(all(feature = "hwcodec", target_os = "macos", feature = "vram"))]
+    if crate::ui_interface::use_vram_render() {
+        scrap::hwcodec::start_check_process();
+    }
 }
 
 /// Start an ipc server for receiving the url scheme.

@@ -1120,12 +1120,16 @@ pub fn enable_vram_option(encode: bool) -> bool {
             enable && allow_d3d_render()
         }
     }
-    // Zero-copy VideoToolbox decode tier; encode is not implemented.
+    // Zero-copy VideoToolbox decode tier; encode is not implemented. The
+    // texture-render gate must agree: the decoder feeds the gpu texture
+    // path, which the client paints only when texture render is on.
     #[cfg(target_os = "macos")]
     {
-        use base::config::keys::OPTION_USE_VRAM_RENDER;
+        use base::config::keys::{OPTION_TEXTURE_RENDER, OPTION_USE_VRAM_RENDER};
         // Machine-local hardware capability, like the texture-render health.
-        !encode && hbb_common::config::LocalConfig::get_option(OPTION_USE_VRAM_RENDER) == "Y"
+        !encode
+            && hbb_common::config::LocalConfig::get_option(OPTION_USE_VRAM_RENDER) == "Y"
+            && hbb_common::config::LocalConfig::get_option(OPTION_TEXTURE_RENDER) == "Y"
     }
     #[cfg(not(any(windows, target_os = "macos")))]
     {

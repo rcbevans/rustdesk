@@ -9,6 +9,8 @@ PODS:
     - FlutterMacOS
   - flutter_custom_cursor (0.0.1):
     - FlutterMacOS
+  - flutter_gpu_texture_renderer (0.0.1):
+    - FlutterMacOS
   - FlutterMacOS (1.0.0)
   - FMDB (2.7.12):
     - FMDB/standard (= 2.7.12)
@@ -47,6 +49,7 @@ DEPENDENCIES:
   - device_info_plus (from `Flutter/ephemeral/.symlinks/plugins/device_info_plus/macos`)
   - file_selector_macos (from `Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos`)
   - flutter_custom_cursor (from `Flutter/ephemeral/.symlinks/plugins/flutter_custom_cursor/macos`)
+  - flutter_gpu_texture_renderer (from `Flutter/ephemeral/.symlinks/plugins/flutter_gpu_texture_renderer/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - package_info_plus (from `Flutter/ephemeral/.symlinks/plugins/package_info_plus/macos`)
   - path_provider_foundation (from `Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin`)
@@ -75,6 +78,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos
   flutter_custom_cursor:
     :path: Flutter/ephemeral/.symlinks/plugins/flutter_custom_cursor/macos
+  flutter_gpu_texture_renderer:
+    :path: Flutter/ephemeral/.symlinks/plugins/flutter_gpu_texture_renderer/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
   package_info_plus:
@@ -106,6 +111,7 @@ SPEC CHECKSUMS:
   device_info_plus: b0fafc687fb901e2af612763340f1b0d4352f8e5
   file_selector_macos: 6280b52b459ae6c590af5d78fc35c7267a3c4b31
   flutter_custom_cursor: 37e588711a2746f5cf48adb58b582cacff11c0c6
+  flutter_gpu_texture_renderer: b2de3c03ca20faeb5f6327aff29ff74124ede9ca
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
   FMDB: 728731dd336af3936ce00f91d9d8495f5718a0e6
   package_info_plus: 122abb51244f66eead59ce7c9c200d6b53111779
@@ -120,6 +126,6 @@ SPEC CHECKSUMS:
   window_manager: 1d01fa7ac65a6e6f83b965471b1a7fdd3f06166c
   window_size: 4bd15034e6e3d0720fd77928a7c42e5492cfece9
 
-PODFILE CHECKSUM: 353c8bcc5d5b0994e508d035b5431cfe18c1dea7
+PODFILE CHECKSUM: 03a1b777c05baa32daae2e684057add7c7d07c03
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.17.0
