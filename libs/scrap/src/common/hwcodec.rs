@@ -778,11 +778,20 @@ pub fn start_check_process() {
     }
     // A valid cached config (signature matches, decoders enumerated) makes
     // the probe a no-op, so both the server and the viewer process can call
-    // this without duplicate probes.
+    // this without duplicate probes. A config written by a binary without
+    // this build's feature set (e.g. one that stripped vram_decode) must
+    // re-probe: the raw JSON distinguishes stripped from legitimately empty.
     #[cfg(any(windows, target_os = "macos"))]
     {
         let c = HwCodecConfig::get();
-        if !c.ram_encode.is_empty() || !c.ram_decode.is_empty() {
+        let has_ram = !c.ram_encode.is_empty() || !c.ram_decode.is_empty();
+        #[cfg(feature = "vram")]
+        let feature_complete = hbb_common::config::common_load::<HwCodecConfig2>("_hwcodec")
+            .config
+            .contains("\"vram_decode\"");
+        #[cfg(not(feature = "vram"))]
+        let feature_complete = true;
+        if has_ram && feature_complete {
             return;
         }
     }
