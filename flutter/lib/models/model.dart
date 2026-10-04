@@ -2013,21 +2013,36 @@ class ImageModel with ChangeNotifier {
     return true;
   }
 
+  /// Dims the zoom clamps are computed from: the decoded image on the pixel
+  /// path; on the zero-copy surface path no image is ever decoded and the
+  /// display rect carries the same peer dims.
+  (int, int) _zoomDims() {
+    final image = _image;
+    if (image != null) return (image.width, image.height);
+    final rect = parent.target?.ffiModel.rect;
+    if (rect != null && rect.width > 0 && rect.height > 0) {
+      return (rect.width.toInt(), rect.height.toInt());
+    }
+    return (0, 0);
+  }
+
   // mobile only
   double get maxScale {
-    if (_image == null) return 1.5;
+    final (w, h) = _zoomDims();
+    if (w == 0 || h == 0) return 1.5;
     final size = parent.target!.canvasModel.getSize();
-    final xscale = size.width / _image!.width;
-    final yscale = size.height / _image!.height;
+    final xscale = size.width / w;
+    final yscale = size.height / h;
     return max(1.5, max(xscale, yscale));
   }
 
   // mobile only
   double get minScale {
-    if (_image == null) return 1.5;
+    final (w, h) = _zoomDims();
+    if (w == 0 || h == 0) return 1.5;
     final size = parent.target!.canvasModel.getSize();
-    final xscale = size.width / _image!.width;
-    final yscale = size.height / _image!.height;
+    final xscale = size.width / w;
+    final yscale = size.height / h;
     return min(xscale, yscale) / 1.5;
   }
 
