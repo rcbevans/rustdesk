@@ -3888,8 +3888,8 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hwcodec"
-version = "0.7.1"
-source = "git+https://github.com/rcbevans/hwcodec?branch=vt-vram#0700804639ff9d6fb9aea8867ebaf06992bf50ac"
+version = "0.8.0"
+source = "git+https://github.com/rcbevans/hwcodec?branch=vt-vram#6fa272cc9fb98050197ac4251ab13be7a9be8a67"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -4427,7 +4427,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e310b3a6b5907f99202fcdb4960ff45b93735d7c7d96b760fcff8db2dc0e103d"
 dependencies = [
  "cfg-if 1.0.0",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -7087,7 +7087,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "android-wakelock",
  "android_logger",
@@ -7188,6 +7188,7 @@ dependencies = [
  "uuid",
  "virtual_display",
  "wallpaper",
+ "wayland-client",
  "winapi 0.3.9",
  "windows 0.61.1",
  "windows-service",
@@ -7197,13 +7198,14 @@ dependencies = [
  "wol-rs",
  "x11-clipboard 0.8.1",
  "x11rb 0.12.0",
+ "xkbcommon-dl",
  "xxhash-rust",
  "zstd",
 ]
 
 [[package]]
 name = "rustdesk-portable-packer"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "brotli",
  "dirs 5.0.1",
